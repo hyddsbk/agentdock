@@ -225,6 +225,10 @@ func (s *Service) start(ctx context.Context, req StartRequest) (StartResult, err
 		sess.stop()
 		return StartResult{}, classifyOperationError(err, "browser_start")
 	}
+	if err := applyViewportMetrics(launchCtx, pageCtx, req.Viewport); err != nil {
+		sess.stop()
+		return StartResult{}, classifyOperationError(err, "browser_start")
+	}
 	if err := applyCookies(launchCtx, pageCtx, req.Cookies); err != nil {
 		sess.stop()
 		return StartResult{}, classifyOperationError(err, "browser_start")

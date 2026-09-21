@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/chromedp/cdproto/cdp"
+	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
@@ -84,6 +85,15 @@ func enableCoreDomainsAction() chromedp.Action {
 		}
 		return nil
 	})
+}
+
+func applyViewportMetrics(parent, pageCtx context.Context, viewport Viewport) error {
+	if viewport.Width <= 0 || viewport.Height <= 0 {
+		return browserError(ErrActionInvalid, "viewport dimensions must be positive", "browser_start", &ErrorDetails{Field: "viewport"}, nil)
+	}
+	return runWithContext(parent, pageCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+		return emulation.SetDeviceMetricsOverride(int64(viewport.Width), int64(viewport.Height), 1, false).Do(ctx)
+	}))
 }
 
 func applyCookies(parent, pageCtx context.Context, cookies []Cookie) error {

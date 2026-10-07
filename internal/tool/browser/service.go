@@ -18,6 +18,9 @@ type Config struct {
 	ExecutablePath   string
 	CDPURL           string
 	ReuseExistingCDP bool
+	// Zero disables the background sweep for embedders and unit tests.
+	WatchdogInterval time.Duration
+	WatchdogStaleAge time.Duration
 }
 
 type ScreenshotPublisher func(context.Context, []byte, int) (map[string]any, error)
@@ -31,10 +34,14 @@ type Service struct {
 	publishScreenshot ScreenshotPublisher
 	now               func() time.Time
 	discoverCDP       func(context.Context) ([]cdpCandidate, error)
+	watchdogStop      chan struct{}
+	watchdogLastSweep time.Time
+	watchdogRemoved   int
+	watchdogBusy      int
 }
 
 func New(cfg Config, publishScreenshot ScreenshotPublisher) *Service {
-	return &Service{
+	s := &Service{
 		cfg:               cfg,
 		sessions:          make(map[string]*session),
 		profiles:          make(map[string]string),
@@ -42,6 +49,11 @@ func New(cfg Config, publishScreenshot ScreenshotPublisher) *Service {
 		now:               time.Now,
 		discoverCDP:       discoverCDPEndpoints,
 	}
+	if cfg.WatchdogInterval > 0 {
+		s.watchdogStop = make(chan struct{})
+		go s.runWatchdog()
+	}
+	return s
 }
 
 func (s *Service) start(ctx context.Context, req StartRequest) (StartResult, error) {

@@ -18,6 +18,14 @@ func (s *Service) closeSession(req CloseRequest) (CloseResult, error) {
 }
 
 func (s *Service) cleanupStale(req CleanupRequest) CleanupResult {
+	removed, _ := s.cleanupStaleFiltered(req, false)
+	return removed
+}
+
+// Active operations hold opMu. TryLock prevents the sweeper from blocking a
+// browser call or evicting a session while CDP actions are in progress.
+// Selected locks are retained until stop() finishes, then released.
+func (s *Service) cleanupStaleFiltered(req CleanupRequest, ownedOnly bool) (CleanupResult, int) {
 	maxAge := req.MaxAge
 	if maxAge <= 0 {
 		maxAge = defaultStaleAge
@@ -26,15 +34,27 @@ func (s *Service) cleanupStale(req CleanupRequest) CleanupResult {
 
 	s.mu.Lock()
 	var stale []*session
-	for id, sess := range s.sessions {
-		sess.mu.Lock()
-		lastActivity := sess.lastActivity
-		sess.mu.Unlock()
-		if lastActivity.After(cutoff) {
-			continue
+	busy := 0
+	if !s.closed {
+		for id, sess := range s.sessions {
+			if ownedOnly && sess.external {
+				continue
+			}
+			if !sess.opMu.TryLock() {
+				busy++
+				continue
+			}
+			sess.mu.Lock()
+			lastActivity := sess.lastActivity
+			closed := sess.closed
+			sess.mu.Unlock()
+			if closed || lastActivity.After(cutoff) {
+				sess.opMu.Unlock()
+				continue
+			}
+			delete(s.sessions, id)
+			stale = append(stale, sess)
 		}
-		delete(s.sessions, id)
-		stale = append(stale, sess)
 	}
 	s.mu.Unlock()
 
@@ -43,9 +63,10 @@ func (s *Service) cleanupStale(req CleanupRequest) CleanupResult {
 		removed = append(removed, sess.id)
 		sess.stop()
 		s.releaseSessionProfile(sess)
+		sess.opMu.Unlock()
 	}
 	sort.Strings(removed)
-	return CleanupResult{RemovedCount: len(removed), RemovedSessions: removed}
+	return CleanupResult{RemovedCount: len(removed), RemovedSessions: removed}, busy
 }
 
 func (s *Service) Close() error {
@@ -58,6 +79,9 @@ func (s *Service) Close() error {
 		return nil
 	}
 	s.closed = true
+	if s.watchdogStop != nil {
+		close(s.watchdogStop)
+	}
 	sessions := make([]*session, 0, len(s.sessions))
 	for _, sess := range s.sessions {
 		sessions = append(sessions, sess)

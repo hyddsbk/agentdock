@@ -17,7 +17,7 @@ func InputSchema(name string) (map[string]any, bool) {
 
 	switch name {
 	case ToolSession:
-		props["action"] = map[string]any{"type": "string", "description": "Browser session action.", "enum": []string{"start", "close", "cleanup_stale"}}
+		props["action"] = map[string]any{"type": "string", "description": "Browser session action.", "enum": []string{"start", "close", "cleanup_stale", "watchdog_status"}}
 		props["url"] = stringProp("Initial URL for action=start. Defaults to about:blank in the AgentDock-managed target.")
 		props["browser"] = map[string]any{"type": "string", "description": "Chromium-family browser to launch. Defaults to auto.", "enum": []string{"auto", "chrome", "chromium", "edge"}}
 		props["headless"] = boolProp("Run the AgentDock-owned browser headless. Defaults to true.")
@@ -102,6 +102,13 @@ func OutputSchema(name string) (map[string]any, bool) {
 		props["profile_id"] = stringProp("Normalized persistent profile id when configured.")
 		props["connection_mode"] = stringProp("How action=start obtained the browser: owned, external_explicit, external_configured, or external_discovered.")
 		props["closed"] = boolProp("Whether action=close closed the AgentDock browser session. External browsers remain running.")
+		props["enabled"] = boolProp("Whether periodic BrowserWatchdog cleanup is enabled.")
+		props["interval_ms"] = intProp("Configured BrowserWatchdog sweep interval.")
+		props["stale_age_ms"] = intProp("Idle age cutoff for automatic cleanup.")
+		props["session_count"] = intProp("Number of currently managed browser sessions.")
+		props["last_sweep"] = stringProp("Time of last automatic sweep, when available.")
+		props["removed_total"] = intProp("Total sessions evicted automatically.")
+		props["busy_skipped_total"] = intProp("Running sessions skipped by BrowserWatchdog.")
 		props["removed_count"] = intProp("Number of current-process stale sessions terminated by cleanup_stale.")
 		props["removed_sessions"] = map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Session ids terminated by cleanup_stale."}
 	case ToolAct, ToolSnapshot:

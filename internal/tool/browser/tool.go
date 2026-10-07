@@ -47,6 +47,13 @@ func (s *Service) HandleSession(ctx context.Context, args map[string]any) (toolc
 		result := browserResultMap(closed)
 		result["browser_ok"] = true
 		return result, nil
+	case "watchdog_status":
+		if err := validateBrowserKeys(args, "action"); err != nil {
+			return browserFailure(err), nil
+		}
+		result := browserResultMap(s.watchdogStatus())
+		result["browser_ok"] = true
+		return result, nil
 	case "cleanup_stale":
 		if err := validateBrowserKeys(args, "action", "max_age_ms", "timeout_ms"); err != nil {
 			return browserFailure(err), nil

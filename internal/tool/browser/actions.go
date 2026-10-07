@@ -59,8 +59,15 @@ func (s *Service) act(ctx context.Context, req ActRequest) (Snapshot, error) {
 		return pageCtx, nil
 	}
 
-	if _, err := pageContext(currentPage); err != nil {
+	initialPageCtx, err := pageContext(currentPage)
+	if err != nil {
 		return Snapshot{}, err
+	}
+	var beforeFingerprint PageFingerprint
+	hasBeforeFingerprint := false
+	if beforeState, captureErr := captureDOMSnapshotState(operationCtx, initialPageCtx, fingerprintTextLimit, fingerprintInteractive); captureErr == nil {
+		beforeFingerprint = fingerprintFromDOM(beforeState)
+		hasBeforeFingerprint = true
 	}
 	for index, action := range req.Actions {
 		pageCtx, err := pageContext(currentPage)
@@ -96,6 +103,9 @@ func (s *Service) act(ctx context.Context, req ActRequest) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	stateDelta, actionResult := sess.finalizeActionProgress(req.Actions, beforeFingerprint, hasBeforeFingerprint, snapshot.PageFingerprint)
+	snapshot.StateDelta = stateDelta
+	snapshot.ActionResult = &actionResult
 	if req.CloseAfter {
 		if _, err := s.removeSession(req.SessionID); err != nil {
 			return Snapshot{}, err

@@ -216,6 +216,50 @@ type PageError struct {
 	Message string `json:"message"`
 }
 
+type PageFingerprint struct {
+	Version           int    `json:"version"`
+	Digest            string `json:"digest"`
+	URL               string `json:"url"`
+	Title             string `json:"title"`
+	TextDigest        string `json:"text_digest"`
+	InteractiveDigest string `json:"interactive_digest"`
+	InteractiveCount  int    `json:"interactive_count"`
+	ScrollX           int    `json:"scroll_x"`
+	ScrollY           int    `json:"scroll_y"`
+}
+
+type StateDelta struct {
+	HasPrevious        bool   `json:"has_previous"`
+	Changed            bool   `json:"changed"`
+	PreviousDigest     string `json:"previous_digest,omitempty"`
+	CurrentDigest      string `json:"current_digest"`
+	URLChanged         bool   `json:"url_changed"`
+	TitleChanged       bool   `json:"title_changed"`
+	TextChanged        bool   `json:"text_changed"`
+	InteractiveChanged bool   `json:"interactive_changed"`
+	ScrollChanged      bool   `json:"scroll_changed"`
+}
+
+type ReplanSignal struct {
+	Required          bool   `json:"required"`
+	Reason            string `json:"reason,omitempty"`
+	StallCount        int    `json:"stall_count,omitempty"`
+	SuggestedStrategy string `json:"suggested_strategy,omitempty"`
+}
+
+type BrowserActionResult struct {
+	OK             bool          `json:"ok"`
+	Status         string        `json:"status"`
+	ActionCount    int           `json:"action_count"`
+	ActionKinds    []string      `json:"action_kinds"`
+	StateChanged   bool          `json:"state_changed"`
+	LoopDetected   bool          `json:"loop_detected"`
+	StallCount     int           `json:"stall_count"`
+	ReplanRequired bool          `json:"replan_required"`
+	Reason         string        `json:"reason,omitempty"`
+	Replan         *ReplanSignal `json:"replan,omitempty"`
+}
+
 type Snapshot struct {
 	SessionID           string               `json:"session_id"`
 	PageID              string               `json:"page_id"`
@@ -230,6 +274,11 @@ type Snapshot struct {
 	ConsoleErrors       []ConsoleError       `json:"console_errors"`
 	NetworkErrors       []NetworkError       `json:"network_errors"`
 	PageErrors          []PageError          `json:"page_errors"`
+	PageFingerprint     PageFingerprint      `json:"page_fingerprint"`
+	StateDelta          StateDelta           `json:"state_delta"`
+	ActionResult        *BrowserActionResult `json:"action_result,omitempty"`
+	ScrollX             int                  `json:"-"`
+	ScrollY             int                  `json:"-"`
 	PNG                 []byte               `json:"-"`
 }
 
@@ -266,8 +315,9 @@ type pageContext struct {
 }
 
 type session struct {
-	opMu sync.Mutex
-	mu   sync.Mutex
+	opMu       sync.Mutex
+	mu         sync.Mutex
+	progressMu sync.Mutex
 
 	id               string
 	kind             Kind
@@ -289,4 +339,5 @@ type session struct {
 	activePage   target.ID
 	pageOrder    uint64
 	closed       bool
+	progress     browserProgressState
 }

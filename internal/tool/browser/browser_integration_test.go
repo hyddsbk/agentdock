@@ -48,6 +48,7 @@ func integrationServer(t *testing.T) *httptest.Server {
 <button id="fetch" onclick="fetch('/api?fast=1').then(()=>document.querySelector('#fetch-result').textContent='fetched')">fetch</button>
 <button id="diagnostics" onclick="console.error('console-boom'); setTimeout(()=>{throw new Error('page-boom')},0); fetch('/network-boom').catch(()=>{})">diagnostics</button>
 <button id="hide" onclick="document.querySelector('#hidden-parent').style.opacity='0'">hide</button>
+<button id="noop" type="button">no-op</button>
 <div id="hidden-parent"><div id="hidden">visible now</div></div>
 <button id="remove" onclick="document.querySelector('#remove-me').remove()">remove</button>
 <div id="remove-me">detach me</div>
@@ -194,6 +195,40 @@ func TestBrowserIntegrationActionsSnapshotAndDiagnostics(t *testing.T) {
 	}
 	if !containsNetworkError(snapshot.NetworkErrors, "network-boom") {
 		t.Fatalf("network errors = %#v", snapshot.NetworkErrors)
+	}
+}
+
+func TestBrowserIntegrationRepeatedNoProgressRequestsReplan(t *testing.T) {
+	server := integrationServer(t)
+	defer server.Close()
+	service := newIntegrationService(t)
+	started := startIntegrationSession(t, service, server.URL, true)
+
+	noop := []Action{{Kind: "click", Click: &ClickAction{Selector: "#noop"}}}
+	for attempt := 1; attempt <= stallReplanThreshold; attempt++ {
+		snapshot, err := service.act(context.Background(), ActRequest{
+			SessionID: started.SessionID, Timeout: 8 * time.Second, Actions: noop,
+		})
+		if err != nil {
+			t.Fatalf("no-op attempt %d: %v", attempt, err)
+		}
+		if snapshot.PageFingerprint.Digest == "" || snapshot.ActionResult == nil {
+			t.Fatalf("missing Batch A metadata: %#v", snapshot)
+		}
+		if snapshot.StateDelta.Changed || snapshot.ActionResult.StallCount != attempt {
+			t.Fatalf("attempt %d progress result: %#v", attempt, snapshot.ActionResult)
+		}
+		if snapshot.ActionResult.ReplanRequired != (attempt == stallReplanThreshold) {
+			t.Fatalf("attempt %d replan mismatch: %#v", attempt, snapshot.ActionResult)
+		}
+	}
+
+	changed, err := service.act(context.Background(), ActRequest{
+		SessionID: started.SessionID, Timeout: 8 * time.Second,
+		Actions: []Action{{Kind: "fill", Fill: &FillAction{Selector: "#name", Value: "changed"}}},
+	})
+	if err != nil || changed.ActionResult == nil || !changed.ActionResult.StateChanged || changed.ActionResult.ReplanRequired || changed.ActionResult.StallCount != 0 {
+		t.Fatalf("state change did not reset stall detector: action=%#v err=%v", changed.ActionResult, err)
 	}
 }
 

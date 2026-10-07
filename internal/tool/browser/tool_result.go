@@ -61,6 +61,14 @@ func browserFailure(err error) toolcore.Result {
 	return toolcore.Result{"browser_ok": false, "code": browserErr.Code, "error": errorValue}
 }
 
+func browserActionFailure(err error, actions []Action) toolcore.Result {
+	result := browserFailure(err)
+	reason, _ := result["code"].(string)
+	actionResult := failedBrowserActionResult(actions, reason)
+	result["action_result"] = map[string]any(browserResultMap(actionResult))
+	return result
+}
+
 func browserResultMap(value any) toolcore.Result {
 	encoded, _ := json.Marshal(value)
 	result := toolcore.Result{}

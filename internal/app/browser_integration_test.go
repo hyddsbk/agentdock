@@ -77,6 +77,9 @@ func TestBrowserIntegrationCloseAfterWaitsForArtifactPublication(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertToolResultMatchestestOutputSchema(t, "browser_snapshot", snapshot)
+	if snapshot["page_fingerprint"] == nil || snapshot["state_delta"] == nil {
+		t.Fatalf("browser_snapshot missing progress metadata: %#v", snapshot)
+	}
 
 	result, err := runtime.Call(context.Background(), "browser_act", map[string]any{
 		"session_id": sessionID,
@@ -90,6 +93,9 @@ func TestBrowserIntegrationCloseAfterWaitsForArtifactPublication(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertToolResultMatchestestOutputSchema(t, "browser_act", result)
+	if result["action_result"] == nil || result["page_fingerprint"] == nil || result["state_delta"] == nil {
+		t.Fatalf("browser_act missing normalized progress metadata: %#v", result)
+	}
 	if result["browser_ok"] != true || result["closed"] != true {
 		t.Fatalf("browser_act close_after result = %#v", result)
 	}

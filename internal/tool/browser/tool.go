@@ -69,15 +69,15 @@ func (s *Service) HandleSession(ctx context.Context, args map[string]any) (toolc
 
 func (s *Service) HandleAct(ctx context.Context, args map[string]any) (toolcore.Result, error) {
 	if err := validateBrowserKeys(args, "session_id", "page_id", "actions", "full_page", "max_text_chars", "max_interactive_elements", "retention_seconds", "close_after", "timeout_ms"); err != nil {
-		return browserFailure(err), nil
+		return browserActionFailure(err, nil), nil
 	}
 	actions, err := parseBrowserActions(args["actions"])
 	if err != nil {
-		return browserFailure(err), nil
+		return browserActionFailure(err, nil), nil
 	}
 	options, err := parseSnapshotOptions(args)
 	if err != nil {
-		return browserFailure(err), nil
+		return browserActionFailure(err, actions), nil
 	}
 
 	snapshot, err := s.act(ctx, ActRequest{
@@ -85,7 +85,7 @@ func (s *Service) HandleAct(ctx context.Context, args map[string]any) (toolcore.
 		MaxTextChars: options.maxText, MaxInteractiveElements: options.maxInteractive, Timeout: options.timeout,
 	})
 	if err != nil {
-		return browserFailure(err), nil
+		return browserActionFailure(err, actions), nil
 	}
 	return s.completeSnapshot(ctx, snapshot, options)
 }

@@ -116,6 +116,11 @@ func OutputSchema(name string) (map[string]any, bool) {
 		props["console_errors"] = arrayProp("Console errors captured for this operation.")
 		props["network_errors"] = arrayProp("Network loading failures captured for this operation.")
 		props["page_errors"] = arrayProp("Unhandled page exceptions captured for this operation.")
+		props["page_fingerprint"] = objectProp("Stable versioned fingerprint of the current page state for progress comparison.")
+		props["state_delta"] = objectProp("Structured comparison between the prior/before state and current page fingerprint.")
+		if name == ToolAct {
+			props["action_result"] = objectProp("Normalized browser action outcome including no-progress loop detection and replan-on-stall guidance.")
+		}
 		props["closed"] = boolProp("Whether close_after terminated the session after successful Artifact publication.")
 	default:
 		return nil, false

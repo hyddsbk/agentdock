@@ -41,6 +41,7 @@ func (s *Service) snapshot(ctx context.Context, req SnapshotRequest) (Snapshot, 
 	if err != nil {
 		return Snapshot{}, err
 	}
+	snapshot.StateDelta = sess.observeFingerprint(snapshot.PageFingerprint)
 	if req.CloseAfter {
 		if _, err := s.removeSession(req.SessionID); err != nil {
 			return Snapshot{}, err
@@ -76,12 +77,24 @@ func (s *Service) snapshotLocked(ctx context.Context, sess *session, req Snapsho
 		maxInteractive = 200
 	}
 
-	var state domSnapshot
-	stateExpr := domSnapshotExpression(maxInteractive)
-	if err := runWithContext(ctx, pageCtx, chromedp.Evaluate(stateExpr, &state)); err != nil {
-		return Snapshot{}, classifyOperationError(err, "snapshot")
+	captureText := maxText
+	if captureText < fingerprintTextLimit {
+		captureText = fingerprintTextLimit
 	}
-	state.Text = truncateRunes(state.Text, maxText)
+	captureInteractive := maxInteractive
+	if captureInteractive < fingerprintInteractive {
+		captureInteractive = fingerprintInteractive
+	}
+	state, err := captureDOMSnapshotState(ctx, pageCtx, captureText, captureInteractive)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	fingerprint := fingerprintFromDOM(state)
+	outputText := truncateRunes(state.Text, maxText)
+	outputInteractive := state.InteractiveElements
+	if len(outputInteractive) > maxInteractive {
+		outputInteractive = outputInteractive[:maxInteractive]
+	}
 
 	var viewportWidth, viewportHeight int
 	var pageWidth, pageHeight int
@@ -134,14 +147,17 @@ func (s *Service) snapshotLocked(ctx context.Context, sess *session, req Snapsho
 		Pages:               pages,
 		URL:                 state.URL,
 		Title:               state.Title,
-		Text:                state.Text,
+		Text:                outputText,
 		Viewport:            Viewport{Width: viewportWidth, Height: viewportHeight},
 		PageSize:            Size{Width: pageWidth, Height: pageHeight},
 		FocusedElement:      state.FocusedElement,
-		InteractiveElements: state.InteractiveElements,
+		InteractiveElements: outputInteractive,
 		ConsoleErrors:       nonNilConsole(consoleErrors),
 		NetworkErrors:       nonNilNetwork(networkErrors),
 		PageErrors:          nonNilPage(pageErrors),
+		PageFingerprint:     fingerprint,
+		ScrollX:             state.ScrollX,
+		ScrollY:             state.ScrollY,
 		PNG:                 png,
 	}, nil
 }
@@ -154,6 +170,24 @@ type domSnapshot struct {
 	PageSize            Size                 `json:"page_size"`
 	FocusedElement      *FocusedElement      `json:"focused_element"`
 	InteractiveElements []InteractiveElement `json:"interactive_elements"`
+	ScrollX             int                  `json:"scroll_x"`
+	ScrollY             int                  `json:"scroll_y"`
+}
+
+func captureDOMSnapshotState(ctx context.Context, pageCtx context.Context, maxText, maxInteractive int) (domSnapshot, error) {
+	if maxText <= 0 {
+		maxText = fingerprintTextLimit
+	}
+	if maxInteractive <= 0 {
+		maxInteractive = fingerprintInteractive
+	}
+	var state domSnapshot
+	stateExpr := domSnapshotExpression(maxInteractive)
+	if err := runWithContext(ctx, pageCtx, chromedp.Evaluate(stateExpr, &state)); err != nil {
+		return domSnapshot{}, classifyOperationError(err, "snapshot")
+	}
+	state.Text = truncateRunes(state.Text, maxText)
+	return state, nil
 }
 
 func domSnapshotExpression(maxInteractive int) string {
@@ -191,7 +225,8 @@ return {
   url:location.href, title:document.title, text:norm(body ? body.innerText : ''),
   viewport:{width:window.innerWidth,height:window.innerHeight},
   page_size:{width:Math.max(doc?.scrollWidth||0,body?.scrollWidth||0,window.innerWidth),height:Math.max(doc?.scrollHeight||0,body?.scrollHeight||0,window.innerHeight)},
-  focused_element:describe(document.activeElement), interactive_elements:interactive
+  focused_element:describe(document.activeElement), interactive_elements:interactive,
+  scroll_x:Math.round(window.scrollX||0), scroll_y:Math.round(window.scrollY||0)
 };
 })()`, maxInteractive)
 }

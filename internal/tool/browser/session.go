@@ -91,6 +91,12 @@ func (sess *session) stop() {
 	}
 }
 
+func (sess *session) isClosed() bool {
+	sess.mu.Lock()
+	defer sess.mu.Unlock()
+	return sess.closed
+}
+
 func (sess *session) touch(now time.Time) {
 	sess.mu.Lock()
 	sess.lastActivity = now

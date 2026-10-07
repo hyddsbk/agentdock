@@ -16,12 +16,18 @@ import (
 )
 
 func (s *Service) act(ctx context.Context, req ActRequest) (Snapshot, error) {
+	if err := validateActSecurity(req.Actions); err != nil {
+		return Snapshot{}, err
+	}
 	sess, err := s.getSession(req.SessionID)
 	if err != nil {
 		return Snapshot{}, err
 	}
 	sess.opMu.Lock()
 	defer sess.opMu.Unlock()
+	if sess.isClosed() {
+		return Snapshot{}, browserError(ErrSessionNotFound, "browser session was closed", "session", &ErrorDetails{SessionID: req.SessionID}, nil)
+	}
 	sess.touch(s.now())
 
 	operationCtx, cancel := withTimeout(ctx, req.Timeout, 30*time.Second)

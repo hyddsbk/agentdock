@@ -12,7 +12,9 @@ func (s *Service) closeSession(req CloseRequest) (CloseResult, error) {
 	if err != nil {
 		return CloseResult{}, err
 	}
+	sess.opMu.Lock()
 	sess.stop()
+	sess.opMu.Unlock()
 	s.releaseSessionProfile(sess)
 	return CloseResult{SessionID: req.SessionID, Closed: true}, nil
 }
@@ -90,7 +92,9 @@ func (s *Service) Close() error {
 	s.mu.Unlock()
 
 	for _, sess := range sessions {
+		sess.opMu.Lock()
 		sess.stop()
+		sess.opMu.Unlock()
 		s.releaseSessionProfile(sess)
 	}
 	s.mu.Lock()

@@ -72,6 +72,9 @@ func (s *Service) start(ctx context.Context, req StartRequest) (StartResult, err
 	if req.URL == "" {
 		req.URL = "about:blank"
 	}
+	if err := validateStartSecurity(req); err != nil {
+		return StartResult{}, err
+	}
 	if req.Viewport.Width <= 0 {
 		req.Viewport.Width = 1280
 	}
@@ -261,6 +264,10 @@ func (s *Service) start(ctx context.Context, req StartRequest) (StartResult, err
 	if err := runWithContext(launchCtx, pageCtx, chromedp.Location(&currentURL), chromedp.Title(&currentTitle)); err != nil {
 		sess.stop()
 		return StartResult{}, classifyOperationError(err, "browser_start")
+	}
+	if err := validateNavigationURL(currentURL, true); err != nil {
+		sess.stop()
+		return StartResult{}, err
 	}
 
 	s.mu.Lock()

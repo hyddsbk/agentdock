@@ -13,6 +13,7 @@ const (
 	ErrTimeout         = "TIMEOUT"
 	ErrCDPFailed       = "CDP_FAILED"
 	ErrCDPAmbiguous    = "CDP_AMBIGUOUS"
+	ErrPolicyDenied    = "SECURITY_POLICY_DENIED"
 )
 
 // ErrorDetails is deliberately typed so dynamic maps never cross the browser

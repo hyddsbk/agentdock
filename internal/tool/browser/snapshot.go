@@ -17,6 +17,9 @@ func (s *Service) snapshot(ctx context.Context, req SnapshotRequest) (Snapshot, 
 	}
 	sess.opMu.Lock()
 	defer sess.opMu.Unlock()
+	if sess.isClosed() {
+		return Snapshot{}, browserError(ErrSessionNotFound, "browser session was closed", "session", &ErrorDetails{SessionID: req.SessionID}, nil)
+	}
 	sess.touch(s.now())
 
 	operationCtx, cancel := withTimeout(ctx, req.Timeout, 30*time.Second)
@@ -87,6 +90,9 @@ func (s *Service) snapshotLocked(ctx context.Context, sess *session, req Snapsho
 	}
 	state, err := captureDOMSnapshotState(ctx, pageCtx, captureText, captureInteractive)
 	if err != nil {
+		return Snapshot{}, err
+	}
+	if err := validateNavigationURL(state.URL, true); err != nil {
 		return Snapshot{}, err
 	}
 	fingerprint := fingerprintFromDOM(state)

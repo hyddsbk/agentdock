@@ -259,6 +259,12 @@ func (sess *session) ensurePageContext(parent context.Context, id target.ID) (co
 		return nil, parent.Err()
 	}
 
+	guard, guardErr := installNavigationGuard(pageCtx)
+	if guardErr != nil {
+		pageCancel()
+		return nil, browserError(ErrCDPFailed, "install navigation response policy", "security_policy", nil, guardErr)
+	}
+
 	sess.mu.Lock()
 	if sess.closed {
 		sess.mu.Unlock()
@@ -270,9 +276,20 @@ func (sess *session) ensurePageContext(parent context.Context, id target.ID) (co
 		pageCancel()
 		return nil, browserError(ErrPageNotFound, "browser page was closed while attaching", "page", &ErrorDetails{PageID: string(id)}, nil)
 	}
-	sess.pageContexts[id] = &pageContext{ctx: pageCtx, cancel: pageCancel}
+	sess.pageContexts[id] = &pageContext{ctx: pageCtx, cancel: pageCancel, guard: guard}
 	sess.mu.Unlock()
 	return pageCtx, nil
+}
+
+// takeNavigationViolation atomically collects a redirect denied by Fetch.
+func (sess *session) takeNavigationViolation(id target.ID) bool {
+	sess.mu.Lock()
+	pc := sess.pageContexts[id]
+	sess.mu.Unlock()
+	if pc == nil {
+		return false
+	}
+	return pc.guard.takeDenied()
 }
 
 func (sess *session) selectPage(requested string) (target.ID, error) {

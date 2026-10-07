@@ -21,7 +21,7 @@ func TestSecurityPolicyURLAllowlist(t *testing.T) {
 		"javascript:alert(1)", "file:///C:/secrets", "chrome://settings",
 		"ftp://example.com/a", "//example.com/path", "/relative",
 		"https://user:secret@example.com", "https://example.com\\@evil.com",
-		"https://example.com/\nmalicious", "https://example.com:badport/",
+		"https://example.com/\nmalicious", "https://example.com:badport/", "https://example.com:65536/", "https://example.com:0/",
 		" https://example.com", "https://example.com ",
 	}
 	for _, u := range blocked {

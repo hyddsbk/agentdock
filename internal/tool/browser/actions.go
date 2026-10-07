@@ -75,13 +75,20 @@ func (s *Service) act(ctx context.Context, req ActRequest) (Snapshot, error) {
 		beforeFingerprint = fingerprintFromDOM(beforeState)
 		hasBeforeFingerprint = true
 	}
+	_ = sess.takeNavigationViolation(currentPage) // clear stale violation from previous call
 	for index, action := range req.Actions {
 		pageCtx, err := pageContext(currentPage)
 		if err != nil {
 			return Snapshot{}, err
 		}
 		if err := runAction(operationCtx, pageCtx, diag, action); err != nil {
+			if sess.takeNavigationViolation(currentPage) {
+				return Snapshot{}, browserError(ErrPolicyDenied, "document redirect blocked by URL policy", "security_policy", &ErrorDetails{ActionIndex: intPointer(index)}, nil)
+			}
 			return Snapshot{}, wrapActionError(err, index, action.Kind)
+		}
+		if sess.takeNavigationViolation(currentPage) {
+			return Snapshot{}, browserError(ErrPolicyDenied, "document redirect blocked by URL policy", "security_policy", &ErrorDetails{ActionIndex: intPointer(index)}, nil)
 		}
 		if err := sess.refreshPages(); err != nil {
 			return Snapshot{}, browserError(ErrCDPFailed, "refresh browser pages after action", "cdp", &ErrorDetails{ActionIndex: intPointer(index)}, err)
@@ -131,6 +138,9 @@ func runAction(parent, pageCtx context.Context, diag *diagnostics, action Action
 			return err
 		})
 	case "click":
+		if err := preflightClickNavigation(parent, pageCtx, action.Click.Selector); err != nil {
+			return err
+		}
 		return runWithContext(parent, pageCtx, chromedp.Click(action.Click.Selector, chromedp.ByQuery))
 	case "fill":
 		return fillValue(parent, pageCtx, *action.Fill)

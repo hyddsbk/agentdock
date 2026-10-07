@@ -312,6 +312,7 @@ type pageState struct {
 type pageContext struct {
 	ctx    context.Context
 	cancel context.CancelFunc
+	guard  *navigationGuard
 }
 
 type session struct {

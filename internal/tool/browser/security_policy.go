@@ -2,12 +2,14 @@ package browser
 
 import (
 	"net/url"
+	"strconv"
 	"strings"
 )
 
-// BrowserSecurityPolicy limits explicitly requested navigations to web URLs.
-// It does not claim to be a network firewall or a redirect interception layer.
-const securityPolicyVersion = 1
+// BrowserSecurityPolicy limits explicit navigation, native click targets and
+// document HTTP redirects to web URLs. It is not an SSRF/network firewall and
+// does not intercept all script-driven navigations or newly created targets.
+const securityPolicyVersion = 2
 
 func validateNavigationURL(raw string, allowBlank bool) error {
 	deny := func() error {
@@ -27,8 +29,13 @@ func validateNavigationURL(raw string, allowBlank bool) error {
 	if strings.HasSuffix(u.Host, ":") || strings.ContainsAny(u.Hostname(), " \t\r\n#?") {
 		return deny()
 	}
-	// url.Parse defers port validation. Force it here without exposing URL values.
-	_ = u.Port()
+	// Restrict optional numeric port to valid TCP values (not just URL syntax).
+	if rawPort := u.Port(); rawPort != "" {
+		port, err := strconv.Atoi(rawPort)
+		if err != nil || port < 1 || port > 65535 {
+			return deny()
+		}
+	}
 	return nil
 }
 

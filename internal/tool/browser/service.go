@@ -248,13 +248,22 @@ func (s *Service) start(ctx context.Context, req StartRequest) (StartResult, err
 		sess.stop()
 		return StartResult{}, classifyOperationError(err, "browser_start")
 	}
-	if err := initialNavigation(launchCtx, pageCtx, req.URL); err != nil {
+	navigationErr := initialNavigation(launchCtx, pageCtx, req.URL)
+	if sess.takeNavigationViolation(pageID) {
 		sess.stop()
-		return StartResult{}, classifyOperationError(err, "browser_start")
+		return StartResult{}, browserError(ErrPolicyDenied, "initial document redirect blocked by URL policy", "security_policy", nil, nil)
+	}
+	if navigationErr != nil {
+		sess.stop()
+		return StartResult{}, classifyOperationError(navigationErr, "browser_start")
 	}
 	if err := applyLocalStorage(launchCtx, pageCtx, req.URL, req.LocalStorage, req.ReloadAfterLocalStorage); err != nil {
 		sess.stop()
 		return StartResult{}, classifyOperationError(err, "browser_start")
+	}
+	if sess.takeNavigationViolation(pageID) {
+		sess.stop()
+		return StartResult{}, browserError(ErrPolicyDenied, "document redirect blocked by URL policy", "security_policy", nil, nil)
 	}
 	if err := sess.refreshPages(); err != nil {
 		sess.stop()

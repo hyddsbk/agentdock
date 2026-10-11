@@ -8,6 +8,7 @@ type StepRequest struct {
 	DependsOn            []string               `json:"depends_on,omitempty"`
 	CompletionConditions []string               `json:"completion_conditions,omitempty"`
 	ContextRefs          []string               `json:"context_refs,omitempty"`
+	RequirementRefs      []string               `json:"requirement_refs,omitempty"`
 	Quality              *taskstate.StepQuality `json:"quality,omitempty"`
 }
 
@@ -26,6 +27,7 @@ type ManageRequest struct {
 	Project              string                        `json:"project,omitempty"`
 	Device               string                        `json:"device,omitempty"`
 	CompletionConditions []string                      `json:"completion_conditions,omitempty"`
+	RequirementRefs      []string                      `json:"requirement_refs,omitempty"`
 	Steps                []StepRequest                 `json:"steps,omitempty"`
 	TemplateID           string                        `json:"template_id,omitempty"`
 	SourceTemplateIDs    []string                      `json:"source_template_ids,omitempty"`
@@ -40,6 +42,7 @@ type ManageRequest struct {
 	Summary              string                        `json:"summary,omitempty"`
 	ContextRefs          []string                      `json:"context_refs,omitempty"`
 	Diagnostic           *taskstate.DiagnosticEvidence `json:"diagnostic,omitempty"`
+	ExecutionEvidence    *taskstate.ExecutionEvidence  `json:"execution_evidence,omitempty"`
 	Verified             []string                      `json:"verified,omitempty"`
 	Risks                []string                      `json:"risks,omitempty"`
 	IntentSpec           *taskstate.OutcomeAxis        `json:"intent_spec,omitempty"`

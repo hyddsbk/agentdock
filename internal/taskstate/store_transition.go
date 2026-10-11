@@ -15,6 +15,10 @@ func (s *Store) Checkpoint(id, stepID, status, summary string, diagnostics ...*D
 	if len(diagnostics) == 1 {
 		diagnostic = diagnostics[0]
 	}
+	return s.CheckpointWithEvidence(id, stepID, status, summary, diagnostic, nil)
+}
+
+func (s *Store) CheckpointWithEvidence(id, stepID, status, summary string, diagnostic *DiagnosticEvidence, executionEvidence *ExecutionEvidence) (Task, error) {
 	return s.mutate(id, func(task *Task, now time.Time) error {
 		if err := requireActive(task); err != nil {
 			return err
@@ -60,7 +64,17 @@ func (s *Store) Checkpoint(id, stepID, status, summary string, diagnostics ...*D
 			}
 			step.Diagnostic = normalized
 		}
-		if step.Status == status && task.Summary == summary && diagnostic == nil {
+		if executionEvidence != nil {
+			if status == StepPending {
+				return errors.New("execution evidence can only be recorded on an in_progress or completed checkpoint")
+			}
+			normalized, err := normalizeExecutionEvidence(step.ID, executionEvidence)
+			if err != nil {
+				return err
+			}
+			step.ExecutionEvidence = normalized
+		}
+		if step.Status == status && task.Summary == summary && diagnostic == nil && executionEvidence == nil {
 			return nil
 		}
 		if !validStepTransition(step.Status, status) {
@@ -73,6 +87,9 @@ func (s *Store) Checkpoint(id, stepID, status, summary string, diagnostics ...*D
 		}
 		if status == StepCompleted {
 			if err := validateDiagnosticStepCompletion(task, step); err != nil {
+				return err
+			}
+			if err := validateTraceableStepCompletion(step); err != nil {
 				return err
 			}
 		}
@@ -130,6 +147,9 @@ func (s *Store) BatchCheckpoint(id string, completedStepIDs []string, currentSte
 		}
 		for _, stepID := range completedStepIDs {
 			step := &task.Steps[stepIndexes[stepID]]
+			if len(step.RequirementRefs) > 0 {
+				return fmt.Errorf("traceable step %s must be completed through a single-step checkpoint with execution evidence", step.ID)
+			}
 			dependencyCompleting := completedSet
 			if step.Quality != nil && isDiagnosticStepKind(step.Quality.Kind) {
 				// Diagnostic stages are deliberately sequential: a later stage cannot be
@@ -295,6 +315,7 @@ func applyFinalReview(task *Task, input FinalReviewInput, now time.Time) error {
 	if intentSpec == nil || engineeringPolicy == nil {
 		return errors.New("final review requires both intent_spec and engineering_policy outcome axes")
 	}
+	traceability := buildTraceabilityCoverage(*task)
 	if status == FinalReviewPass {
 		if intentSpec.Status != FinalReviewPass || engineeringPolicy.Status != FinalReviewPass {
 			return errors.New("passing final review requires both outcome axes to pass")
@@ -304,6 +325,9 @@ func applyFinalReview(task *Task, input FinalReviewInput, now time.Time) error {
 		}
 		if pending := incompleteStepIDs(task.Steps); len(pending) > 0 {
 			return fmt.Errorf("passing final review requires all task steps completed: %s", strings.Join(pending, ", "))
+		}
+		if err := requireCompleteTraceability(traceability); err != nil {
+			return err
 		}
 	} else {
 		if intentSpec.Status != FinalReviewFailed && engineeringPolicy.Status != FinalReviewFailed {
@@ -319,7 +343,7 @@ func applyFinalReview(task *Task, input FinalReviewInput, now time.Time) error {
 		return err
 	}
 	clearHandoff(task)
-	task.FinalReview = &FinalReview{Status: status, Summary: summary, VerifiedFacts: verifiedFacts, OpenRisks: openRisks, MissingChecks: missingChecks, IntentSpec: intentSpec, EngineeringPolicy: engineeringPolicy, ReviewRevision: reviewRevision, ReviewedAt: now}
+	task.FinalReview = &FinalReview{Status: status, Summary: summary, VerifiedFacts: verifiedFacts, OpenRisks: openRisks, MissingChecks: missingChecks, IntentSpec: intentSpec, EngineeringPolicy: engineeringPolicy, Traceability: traceability, ReviewRevision: reviewRevision, ReviewedAt: now}
 	task.EvolutionCandidates = nil
 	if status == FinalReviewPass {
 		task.Phase = PhaseCloseout

@@ -12,6 +12,10 @@ func (s *Store) Create(title, goal string, conditionTexts []string, steps []Task
 }
 
 func (s *Store) CreateWithContext(title, goal, project, device string, conditionTexts []string, steps []TaskStepInput, sourceTemplates []TemplateReference, initialBindings ...EvolutionBinding) (Task, error) {
+	return s.CreateWithTraceability(title, goal, project, device, conditionTexts, steps, sourceTemplates, nil, initialBindings...)
+}
+
+func (s *Store) CreateWithTraceability(title, goal, project, device string, conditionTexts []string, steps []TaskStepInput, sourceTemplates []TemplateReference, requirementRefs []string, initialBindings ...EvolutionBinding) (Task, error) {
 	release, err := s.acquireStoreLock()
 	if err != nil {
 		return Task{}, err
@@ -50,6 +54,13 @@ func (s *Store) CreateWithContext(title, goal, project, device string, condition
 	now := time.Now().UTC()
 	taskSteps, err := normalizeTaskSteps(steps, now)
 	if err != nil {
+		return Task{}, err
+	}
+	requirementRefs, err = normalizeRequirementRefs("task", requirementRefs, maxTaskRequirementRefs)
+	if err != nil {
+		return Task{}, err
+	}
+	if err := validateTaskTraceability(requirementRefs, taskSteps); err != nil {
 		return Task{}, err
 	}
 	templateRefs, err := normalizeTemplateReferences(sourceTemplates)
@@ -99,6 +110,7 @@ func (s *Store) CreateWithContext(title, goal, project, device string, condition
 		Status:            StatusActive,
 		Phase:             phase,
 		Conditions:        make([]Condition, 0, len(conditionTexts)),
+		RequirementRefs:   requirementRefs,
 		SourceTemplates:   templateRefs,
 		Steps:             taskSteps,
 		EvolutionBindings: bindings,

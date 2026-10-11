@@ -29,6 +29,7 @@ type TemplateStep struct {
 	DependsOn            []string     `json:"depends_on,omitempty"`
 	CompletionConditions []string     `json:"completion_conditions,omitempty"`
 	ContextRefs          []string     `json:"context_refs,omitempty"`
+	RequirementRefs      []string     `json:"requirement_refs,omitempty"`
 	Quality              *StepQuality `json:"quality,omitempty"`
 }
 
@@ -41,6 +42,7 @@ type Template struct {
 	Status               TemplateStatus `json:"status"`
 	Match                MatchRule      `json:"match,omitempty"`
 	CompletionConditions []string       `json:"completion_conditions"`
+	RequirementRefs      []string       `json:"requirement_refs,omitempty"`
 	Steps                []TemplateStep `json:"steps"`
 	AllowLongTemplate    bool           `json:"allow_long_template,omitempty"`
 	LongTemplateReason   string         `json:"long_template_reason,omitempty"`
@@ -78,6 +80,7 @@ type TaskStepInput struct {
 	DependsOn            []string     `json:"depends_on,omitempty"`
 	CompletionConditions []string     `json:"completion_conditions,omitempty"`
 	ContextRefs          []string     `json:"context_refs,omitempty"`
+	RequirementRefs      []string     `json:"requirement_refs,omitempty"`
 	Quality              *StepQuality `json:"quality,omitempty"`
 }
 
@@ -107,8 +110,10 @@ type TaskStep struct {
 	DependsOn            []string            `json:"depends_on,omitempty"`
 	CompletionConditions []string            `json:"completion_conditions,omitempty"`
 	ContextRefs          []string            `json:"context_refs,omitempty"`
+	RequirementRefs      []string            `json:"requirement_refs,omitempty"`
 	Quality              *StepQuality        `json:"quality,omitempty"`
 	Diagnostic           *DiagnosticEvidence `json:"diagnostic,omitempty"`
+	ExecutionEvidence    *ExecutionEvidence  `json:"execution_evidence,omitempty"`
 	Status               string              `json:"status"`
 	UpdatedAt            time.Time           `json:"updated_at"`
 }

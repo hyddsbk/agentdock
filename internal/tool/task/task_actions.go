@@ -20,6 +20,7 @@ type taskManageInput struct {
 	Project              string
 	Device               string
 	CompletionConditions []string
+	RequirementRefs      []string
 	Steps                []taskstate.TaskStepInput
 	TemplateID           string
 	SourceTemplateIDs    []string
@@ -35,6 +36,7 @@ type taskManageInput struct {
 	Summary              string
 	ContextRefs          []string
 	Diagnostic           *taskstate.DiagnosticEvidence
+	ExecutionEvidence    *taskstate.ExecutionEvidence
 	Verified             []string
 	Risks                []string
 	IntentSpec           *taskstate.OutcomeAxis
@@ -69,7 +71,7 @@ type workflowTemplateMatchRequest struct {
 func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) {
 	steps := make([]taskstate.TaskStepInput, len(request.Steps))
 	for i, step := range request.Steps {
-		steps[i] = taskstate.TaskStepInput{ID: step.ID, Title: step.Title, DependsOn: step.DependsOn, CompletionConditions: step.CompletionConditions, ContextRefs: step.ContextRefs, Quality: step.Quality}
+		steps[i] = taskstate.TaskStepInput{ID: step.ID, Title: step.Title, DependsOn: step.DependsOn, CompletionConditions: step.CompletionConditions, ContextRefs: step.ContextRefs, RequirementRefs: step.RequirementRefs, Quality: step.Quality}
 	}
 	learningChecks := make([]taskstate.EvolutionBinding, len(request.LearningChecks))
 	for i, check := range request.LearningChecks {
@@ -87,6 +89,7 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 		Project:              strings.ToLower(strings.TrimSpace(request.Project)),
 		Device:               strings.TrimSpace(request.Device),
 		CompletionConditions: append([]string(nil), request.CompletionConditions...),
+		RequirementRefs:      append([]string(nil), request.RequirementRefs...),
 		Steps:                steps,
 		TemplateID:           strings.TrimSpace(request.TemplateID),
 		SourceTemplateIDs:    append([]string(nil), request.SourceTemplateIDs...),
@@ -100,6 +103,7 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 		Summary:              request.Summary,
 		ContextRefs:          append([]string(nil), request.ContextRefs...),
 		Diagnostic:           request.Diagnostic,
+		ExecutionEvidence:    request.ExecutionEvidence,
 		Verified:             append([]string(nil), request.Verified...),
 		Risks:                append([]string(nil), request.Risks...),
 		IntentSpec:           request.IntentSpec,
@@ -111,6 +115,12 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 	}
 	if input.Diagnostic != nil && input.Action != "checkpoint" {
 		return input, toolErrorDetails("VALIDATION_ERROR", "diagnostic evidence is only valid for checkpoint", "validation", map[string]any{"field": "diagnostic", "action": input.Action})
+	}
+	if input.ExecutionEvidence != nil && input.Action != "checkpoint" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "execution_evidence is only valid for checkpoint", "validation", map[string]any{"field": "execution_evidence", "action": input.Action})
+	}
+	if len(input.RequirementRefs) > 0 && input.Action != "create" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "top-level requirement_refs are only valid for create", "validation", map[string]any{"field": "requirement_refs", "action": input.Action})
 	}
 	if (strings.TrimSpace(input.NextStepID) != "" || len(input.ContextRefs) > 0) && input.Action != "handoff" {
 		return input, toolErrorDetails("VALIDATION_ERROR", "next_step_id and top-level context_refs are only valid for handoff", "validation", map[string]any{"action": input.Action})
@@ -175,6 +185,7 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 	case "create":
 		steps := append([]taskstate.TaskStepInput(nil), input.Steps...)
 		conditions := append([]string(nil), input.CompletionConditions...)
+		requirementRefs := append([]string(nil), input.RequirementRefs...)
 		var sourceTemplates []taskstate.TemplateReference
 		if input.TemplateID != "" && len(input.SourceTemplateIDs) > 0 {
 			return nil, taskToolError(fmt.Errorf("template_id and source_template_ids cannot be used together"))
@@ -188,6 +199,7 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 				steps = taskStepInputsFromTemplate(template)
 			}
 			conditions = append(append([]string{}, template.CompletionConditions...), conditions...)
+			requirementRefs = mergeUniqueStrings(template.RequirementRefs, requirementRefs)
 			sourceTemplates = []taskstate.TemplateReference{{ID: template.ID, Version: template.Version, Hash: template.Hash, SourceEvolutionID: template.SourceEvolutionID}}
 		}
 		if len(input.SourceTemplateIDs) > 0 {
@@ -202,6 +214,9 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 				return nil, fetchErr
 			}
 			sourceTemplates = templateReferences(templates)
+			for _, template := range templates {
+				requirementRefs = mergeUniqueStrings(requirementRefs, template.RequirementRefs)
+			}
 		}
 		bindings := append([]taskstate.EvolutionBinding(nil), input.LearningChecks...)
 		if len(bindings) > 0 {
@@ -214,7 +229,7 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 				return nil, taskToolError(err)
 			}
 		}
-		task, err = s.tasks.CreateWithContext(input.Title, input.Goal, input.Project, input.Device, conditions, steps, sourceTemplates, bindings...)
+		task, err = s.tasks.CreateWithTraceability(input.Title, input.Goal, input.Project, input.Device, conditions, steps, sourceTemplates, requirementRefs, bindings...)
 		if err != nil {
 			return nil, taskToolError(err)
 		}
@@ -267,9 +282,12 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 			if input.Diagnostic != nil {
 				return nil, toolErrorDetails("VALIDATION_ERROR", "diagnostic evidence is only accepted by single-step checkpoint", "validation", map[string]any{"field": "diagnostic"})
 			}
+			if input.ExecutionEvidence != nil {
+				return nil, toolErrorDetails("VALIDATION_ERROR", "execution_evidence is only accepted by single-step checkpoint", "validation", map[string]any{"field": "execution_evidence"})
+			}
 			task, err = s.tasks.BatchCheckpoint(input.TaskID, input.CompletedStepIDs, input.CurrentStepID, input.Summary)
 		} else {
-			task, err = s.tasks.Checkpoint(input.TaskID, input.StepID, input.Status, input.Summary, input.Diagnostic)
+			task, err = s.tasks.CheckpointWithEvidence(input.TaskID, input.StepID, input.Status, input.Summary, input.Diagnostic, input.ExecutionEvidence)
 		}
 	case "block":
 		task, err = s.tasks.Block(input.TaskID, input.Summary)

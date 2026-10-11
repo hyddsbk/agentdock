@@ -6,12 +6,13 @@ import (
 )
 
 const (
-	SchemaVersion           = 6
+	SchemaVersion           = 7
 	legacySchemaVersion     = 1
 	dependencySchemaVersion = 2
 	contextSchemaVersion    = 3
 	qualitySchemaVersion    = 4
 	diagnosticSchemaVersion = 5
+	handoffSchemaVersion    = 6
 	FinalReviewPass         = "pass"
 	FinalReviewFailed       = "failed"
 
@@ -78,15 +79,16 @@ type FinalReviewInput struct {
 }
 
 type FinalReview struct {
-	Status            string       `json:"status"`
-	Summary           string       `json:"summary"`
-	VerifiedFacts     []string     `json:"verified_facts,omitempty"`
-	OpenRisks         []string     `json:"open_risks,omitempty"`
-	MissingChecks     []string     `json:"missing_checks,omitempty"`
-	IntentSpec        *OutcomeAxis `json:"intent_spec,omitempty"`
-	EngineeringPolicy *OutcomeAxis `json:"engineering_policy,omitempty"`
-	ReviewRevision    string       `json:"review_revision"`
-	ReviewedAt        time.Time    `json:"reviewed_at"`
+	Status            string                `json:"status"`
+	Summary           string                `json:"summary"`
+	VerifiedFacts     []string              `json:"verified_facts,omitempty"`
+	OpenRisks         []string              `json:"open_risks,omitempty"`
+	MissingChecks     []string              `json:"missing_checks,omitempty"`
+	IntentSpec        *OutcomeAxis          `json:"intent_spec,omitempty"`
+	EngineeringPolicy *OutcomeAxis          `json:"engineering_policy,omitempty"`
+	Traceability      *TraceabilityCoverage `json:"traceability,omitempty"`
+	ReviewRevision    string                `json:"review_revision"`
+	ReviewedAt        time.Time             `json:"reviewed_at"`
 }
 
 type Event struct {
@@ -105,6 +107,7 @@ type Task struct {
 	Status                Status                 `json:"status"`
 	Phase                 Phase                  `json:"phase"`
 	Conditions            []Condition            `json:"conditions"`
+	RequirementRefs       []string               `json:"requirement_refs,omitempty"`
 	Template              *TemplateSelection     `json:"template,omitempty"` // 仅用于读取旧任务状态。
 	SourceTemplates       []TemplateReference    `json:"source_templates,omitempty"`
 	Steps                 []TaskStep             `json:"steps,omitempty"`

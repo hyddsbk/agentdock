@@ -52,6 +52,12 @@ func compactTaskSummary(task taskstate.Task) map[string]any {
 		if len(step.ContextRefs) > 0 {
 			item["context_refs"] = append([]string(nil), step.ContextRefs...)
 		}
+		if len(step.RequirementRefs) > 0 {
+			item["requirement_refs"] = append([]string(nil), step.RequirementRefs...)
+		}
+		if step.ExecutionEvidence != nil {
+			item["execution_evidence"] = step.ExecutionEvidence
+		}
 		if step.Quality != nil {
 			item["quality"] = step.Quality
 		}
@@ -96,6 +102,10 @@ func compactTaskSummary(task taskstate.Task) map[string]any {
 	if task.Summary != "" {
 		summary["summary"] = truncateString(task.Summary, 240)
 	}
+	if len(task.RequirementRefs) > 0 {
+		summary["requirement_refs"] = append([]string(nil), task.RequirementRefs...)
+		summary["requirement_ref_count"] = len(task.RequirementRefs)
+	}
 	if len(task.SourceTemplates) > 0 {
 		summary["source_templates"] = task.SourceTemplates
 	}
@@ -121,6 +131,9 @@ func compactTaskSummary(task taskstate.Task) map[string]any {
 		}
 		if task.FinalReview.EngineeringPolicy != nil {
 			review["engineering_policy"] = task.FinalReview.EngineeringPolicy
+		}
+		if task.FinalReview.Traceability != nil {
+			review["traceability"] = task.FinalReview.Traceability
 		}
 		summary["final_review"] = review
 	}
@@ -159,6 +172,12 @@ func compactResumeContext(task taskstate.Task) map[string]any {
 		if len(step.ContextRefs) > 0 {
 			item["context_refs"] = append([]string(nil), step.ContextRefs...)
 		}
+		if len(step.RequirementRefs) > 0 {
+			item["requirement_refs"] = append([]string(nil), step.RequirementRefs...)
+		}
+		if step.ExecutionEvidence != nil {
+			item["execution_evidence"] = step.ExecutionEvidence
+		}
 		if step.Quality != nil {
 			item["quality"] = step.Quality
 		}
@@ -186,6 +205,7 @@ func compactResumeContext(task taskstate.Task) map[string]any {
 		"summary":          truncateString(task.Summary, 480),
 		"ready_frontier":   readyFrontier,
 		"context_refs":     refs,
+		"requirement_refs": append([]string(nil), task.RequirementRefs...),
 		"risks":            append([]string(nil), task.Handoff.Risks...),
 		"handoff_revision": task.Handoff.Revision,
 		"created_at":       task.Handoff.CreatedAt,
@@ -206,7 +226,7 @@ func compactTaskListItem(task taskstate.Task) map[string]any {
 		"completed_step_count": summary["completed_step_count"], "step_count": summary["step_count"],
 		"ready_step_count": summary["ready_step_count"], "review_status": summary["review_status"], "updated_at": summary["updated_at"],
 	}
-	for _, key := range []string{"current_step", "summary", "blocker", "handoff"} {
+	for _, key := range []string{"current_step", "summary", "blocker", "handoff", "requirement_refs", "requirement_ref_count"} {
 		if value, ok := summary[key]; ok {
 			item[key] = value
 		}

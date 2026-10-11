@@ -476,7 +476,7 @@ func TestBatchCheckpointAcceptsDependencyClosureAtomically(t *testing.T) {
 }
 
 func TestLegacyTaskStateLoadsAsCurrentSchema(t *testing.T) {
-	for _, version := range []int{legacySchemaVersion, dependencySchemaVersion, contextSchemaVersion, qualitySchemaVersion, diagnosticSchemaVersion} {
+	for _, version := range []int{legacySchemaVersion, dependencySchemaVersion, contextSchemaVersion, qualitySchemaVersion, diagnosticSchemaVersion, handoffSchemaVersion} {
 		t.Run(fmt.Sprintf("v%d", version), func(t *testing.T) {
 			store, err := New(t.TempDir())
 			if err != nil {
@@ -498,7 +498,7 @@ func TestLegacyTaskStateLoadsAsCurrentSchema(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if loaded.SchemaVersion != SchemaVersion || len(loaded.Steps) != 1 || len(loaded.Steps[0].DependsOn) != 0 || len(loaded.Steps[0].CompletionConditions) != 0 || len(loaded.Steps[0].ContextRefs) != 0 || loaded.Steps[0].Quality != nil || loaded.Steps[0].Diagnostic != nil || loaded.Handoff != nil {
+			if loaded.SchemaVersion != SchemaVersion || len(loaded.RequirementRefs) != 0 || len(loaded.Steps) != 1 || len(loaded.Steps[0].DependsOn) != 0 || len(loaded.Steps[0].CompletionConditions) != 0 || len(loaded.Steps[0].ContextRefs) != 0 || len(loaded.Steps[0].RequirementRefs) != 0 || loaded.Steps[0].Quality != nil || loaded.Steps[0].Diagnostic != nil || loaded.Steps[0].ExecutionEvidence != nil || loaded.Handoff != nil {
 				t.Fatalf("legacy task migration = %#v", loaded)
 			}
 		})

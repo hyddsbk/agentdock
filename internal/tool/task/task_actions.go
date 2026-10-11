@@ -64,7 +64,7 @@ type workflowTemplateMatchRequest struct {
 func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) {
 	steps := make([]taskstate.TaskStepInput, len(request.Steps))
 	for i, step := range request.Steps {
-		steps[i] = taskstate.TaskStepInput{ID: step.ID, Title: step.Title, DependsOn: step.DependsOn}
+		steps[i] = taskstate.TaskStepInput{ID: step.ID, Title: step.Title, DependsOn: step.DependsOn, CompletionConditions: step.CompletionConditions, ContextRefs: step.ContextRefs}
 	}
 	learningChecks := make([]taskstate.EvolutionBinding, len(request.LearningChecks))
 	for i, check := range request.LearningChecks {

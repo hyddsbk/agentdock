@@ -16,10 +16,12 @@ type MatchRule struct {
 }
 
 type TemplateStep struct {
-	ID        string   `json:"id"`
-	Title     string   `json:"title"`
-	Phase     Phase    `json:"phase"`
-	DependsOn []string `json:"depends_on,omitempty"`
+	ID                   string   `json:"id"`
+	Title                string   `json:"title"`
+	Phase                Phase    `json:"phase"`
+	DependsOn            []string `json:"depends_on,omitempty"`
+	CompletionConditions []string `json:"completion_conditions,omitempty"`
+	ContextRefs          []string `json:"context_refs,omitempty"`
 }
 
 type Template struct {
@@ -62,10 +64,12 @@ type TemplateReference struct {
 }
 
 type TaskStepInput struct {
-	ID        string   `json:"id"`
-	Title     string   `json:"title"`
-	Phase     Phase    `json:"phase,omitempty"`
-	DependsOn []string `json:"depends_on,omitempty"`
+	ID                   string   `json:"id"`
+	Title                string   `json:"title"`
+	Phase                Phase    `json:"phase,omitempty"`
+	DependsOn            []string `json:"depends_on,omitempty"`
+	CompletionConditions []string `json:"completion_conditions,omitempty"`
+	ContextRefs          []string `json:"context_refs,omitempty"`
 }
 
 const (
@@ -75,10 +79,12 @@ const (
 )
 
 type TaskStep struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	Phase     Phase     `json:"phase"`
-	DependsOn []string  `json:"depends_on,omitempty"`
-	Status    string    `json:"status"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID                   string    `json:"id"`
+	Title                string    `json:"title"`
+	Phase                Phase     `json:"phase"`
+	DependsOn            []string  `json:"depends_on,omitempty"`
+	CompletionConditions []string  `json:"completion_conditions,omitempty"`
+	ContextRefs          []string  `json:"context_refs,omitempty"`
+	Status               string    `json:"status"`
+	UpdatedAt            time.Time `json:"updated_at"`
 }

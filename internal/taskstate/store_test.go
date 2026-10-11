@@ -342,6 +342,44 @@ func TestCreateRejectsInvalidDependencyGraphs(t *testing.T) {
 	}
 }
 
+func TestCreateRejectsDAGWithoutPerStepCompletionConditions(t *testing.T) {
+	store, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.Create("Missing step criteria", "reject incomplete DAG contract", []string{"rejected"}, []TaskStepInput{
+		{ID: "inspect", Title: "Inspect", CompletionConditions: []string{"Inspection is complete."}},
+		{ID: "implement", Title: "Implement", DependsOn: []string{"inspect"}},
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "requires at least one completion condition") {
+		t.Fatalf("expected missing step completion condition error, got %v", err)
+	}
+}
+
+func TestCreateRejectsInvalidStepContextContracts(t *testing.T) {
+	store, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name string
+		step TaskStepInput
+		want string
+	}{
+		{name: "duplicate_ref", step: TaskStepInput{ID: "work", Title: "Work", ContextRefs: []string{"recall://a", "recall://a"}}, want: "duplicate context ref"},
+		{name: "blank_ref", step: TaskStepInput{ID: "work", Title: "Work", ContextRefs: []string{" "}}, want: "invalid context ref"},
+		{name: "duplicate_condition", step: TaskStepInput{ID: "work", Title: "Work", CompletionConditions: []string{"Done", "Done"}}, want: "non-empty and distinct"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := store.Create("Invalid step contract", "reject invalid step contract", []string{"rejected"}, []TaskStepInput{tt.step}, nil)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Create() error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestReadyFrontierGatesDependenciesAndAllowsParallelWork(t *testing.T) {
 	store, err := New(t.TempDir())
 	if err != nil {
@@ -352,10 +390,10 @@ func TestReadyFrontierGatesDependenciesAndAllowsParallelWork(t *testing.T) {
 		"run dependency graph",
 		[]string{"graph completes"},
 		[]TaskStepInput{
-			{ID: "left", Title: "Left branch"},
-			{ID: "right", Title: "Right branch"},
-			{ID: "join", Title: "Join", DependsOn: []string{"left", "right"}},
-			{ID: "verify", Title: "Verify", DependsOn: []string{"join"}},
+			{ID: "left", Title: "Left branch", CompletionConditions: []string{"Left branch is complete."}},
+			{ID: "right", Title: "Right branch", CompletionConditions: []string{"Right branch is complete."}},
+			{ID: "join", Title: "Join", DependsOn: []string{"left", "right"}, CompletionConditions: []string{"Branches are joined."}},
+			{ID: "verify", Title: "Verify", DependsOn: []string{"join"}, CompletionConditions: []string{"Verification passes."}},
 		},
 		nil,
 	)
@@ -401,9 +439,9 @@ func TestBatchCheckpointAcceptsDependencyClosureAtomically(t *testing.T) {
 		"advance a dependency closure",
 		[]string{"closure recorded"},
 		[]TaskStepInput{
-			{ID: "a", Title: "A"},
-			{ID: "b", Title: "B", DependsOn: []string{"a"}},
-			{ID: "c", Title: "C", DependsOn: []string{"b"}},
+			{ID: "a", Title: "A", CompletionConditions: []string{"A is complete."}},
+			{ID: "b", Title: "B", DependsOn: []string{"a"}, CompletionConditions: []string{"B is complete."}},
+			{ID: "c", Title: "C", DependsOn: []string{"b"}, CompletionConditions: []string{"C is complete."}},
 		},
 		nil,
 	)
@@ -422,29 +460,33 @@ func TestBatchCheckpointAcceptsDependencyClosureAtomically(t *testing.T) {
 	}
 }
 
-func TestLegacyV1TaskStateLoadsAsCurrentSchema(t *testing.T) {
-	store, err := New(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	task, err := store.Create("Legacy", "load old state", []string{"loaded"}, []TaskStepInput{{ID: "work", Title: "Work"}}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	task.SchemaVersion = legacySchemaVersion
-	data, err := json.Marshal(task)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(store.Root(), task.ID+".json"), data, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	loaded, err := store.Get(task.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if loaded.SchemaVersion != SchemaVersion || len(loaded.Steps) != 1 || len(loaded.Steps[0].DependsOn) != 0 {
-		t.Fatalf("legacy task migration = %#v", loaded)
+func TestLegacyTaskStateLoadsAsCurrentSchema(t *testing.T) {
+	for _, version := range []int{legacySchemaVersion, dependencySchemaVersion} {
+		t.Run(fmt.Sprintf("v%d", version), func(t *testing.T) {
+			store, err := New(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			task, err := store.Create("Legacy", "load old state", []string{"loaded"}, []TaskStepInput{{ID: "work", Title: "Work"}}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			task.SchemaVersion = version
+			data, err := json.Marshal(task)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(store.Root(), task.ID+".json"), data, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			loaded, err := store.Get(task.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if loaded.SchemaVersion != SchemaVersion || len(loaded.Steps) != 1 || len(loaded.Steps[0].DependsOn) != 0 || len(loaded.Steps[0].CompletionConditions) != 0 || len(loaded.Steps[0].ContextRefs) != 0 {
+				t.Fatalf("legacy task migration = %#v", loaded)
+			}
+		})
 	}
 }
 

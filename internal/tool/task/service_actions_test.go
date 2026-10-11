@@ -222,7 +222,7 @@ func TestTaskManageComposedTemplatesRequireExplicitResult(t *testing.T) {
 	created, err := rt.manageTest(context.Background(), map[string]any{
 		"action": "create", "title": "Develop and deploy", "goal": "combine workflows",
 		"source_template_ids":   []string{"development", "deployment"},
-		"steps":                 []map[string]any{{"id": "code", "title": "Write and test code"}, {"id": "deploy", "title": "Deploy and verify", "depends_on": []string{"code"}}},
+		"steps":                 []map[string]any{{"id": "code", "title": "Write and test code", "completion_conditions": []string{"Tests pass."}, "context_refs": []string{"artifact://test-results/latest"}}, {"id": "deploy", "title": "Deploy and verify", "depends_on": []string{"code"}, "completion_conditions": []string{"Production is healthy."}, "context_refs": []string{"artifact://deployment/latest"}}},
 		"completion_conditions": []string{"tests pass", "production healthy"},
 	})
 	if err != nil {

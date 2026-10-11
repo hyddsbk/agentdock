@@ -12,8 +12,8 @@ func TestCreateAcceptsNexusCompatibleDottedStepIDs(t *testing.T) {
 		"keep workflow and task id grammar aligned",
 		[]string{"done"},
 		[]TaskStepInput{
-			{ID: "build.api", Title: "Build API"},
-			{ID: "verify.api", Title: "Verify API", DependsOn: []string{"build.api"}},
+			{ID: "build.api", Title: "Build API", CompletionConditions: []string{"API build completes."}},
+			{ID: "verify.api", Title: "Verify API", DependsOn: []string{"build.api"}, CompletionConditions: []string{"API verification passes."}},
 		},
 		nil,
 	)

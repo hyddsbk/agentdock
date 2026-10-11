@@ -43,13 +43,75 @@ func normalizeTaskSteps(values []TaskStepInput, now time.Time) ([]TaskStep, erro
 		if err != nil {
 			return nil, err
 		}
+		completionConditions, contextRefs, err := normalizeStepContract(id, value.CompletionConditions, value.ContextRefs)
+		if err != nil {
+			return nil, err
+		}
 		seen[id] = struct{}{}
-		steps = append(steps, TaskStep{ID: id, Title: title, Phase: phase, DependsOn: dependsOn, Status: StepPending, UpdatedAt: now})
+		steps = append(steps, TaskStep{ID: id, Title: title, Phase: phase, DependsOn: dependsOn, CompletionConditions: completionConditions, ContextRefs: contextRefs, Status: StepPending, UpdatedAt: now})
 	}
 	if err := validateTaskStepGraph(steps); err != nil {
 		return nil, err
 	}
+	if err := validateTaskStepContracts(steps); err != nil {
+		return nil, err
+	}
 	return steps, nil
+}
+
+const maxStepCompletionConditions = 4
+const maxStepContextRefs = 8
+const maxStepCompletionConditionRunes = 240
+const maxStepContextRefRunes = 512
+
+func normalizeStepContract(stepID string, conditions, refs []string) ([]string, []string, error) {
+	if len(conditions) > maxStepCompletionConditions {
+		return nil, nil, fmt.Errorf("task step %s has %d completion conditions; max %d", stepID, len(conditions), maxStepCompletionConditions)
+	}
+	normalizedConditions := normalizeTexts(conditions)
+	if len(normalizedConditions) != len(conditions) {
+		return nil, nil, fmt.Errorf("task step %s completion_conditions must be non-empty and distinct", stepID)
+	}
+	for _, condition := range conditions {
+		if strings.TrimSpace(condition) != condition || len([]rune(condition)) > maxStepCompletionConditionRunes {
+			return nil, nil, fmt.Errorf("task step %s has invalid completion condition", stepID)
+		}
+	}
+	if len(refs) > maxStepContextRefs {
+		return nil, nil, fmt.Errorf("task step %s has %d context refs; max %d", stepID, len(refs), maxStepContextRefs)
+	}
+	seenRefs := make(map[string]struct{}, len(refs))
+	normalizedRefs := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		trimmed := strings.TrimSpace(ref)
+		if trimmed == "" || trimmed != ref || strings.ContainsAny(ref, "\r\n") || len([]rune(ref)) > maxStepContextRefRunes {
+			return nil, nil, fmt.Errorf("task step %s has invalid context ref %q", stepID, ref)
+		}
+		if _, duplicate := seenRefs[ref]; duplicate {
+			return nil, nil, fmt.Errorf("task step %s has duplicate context ref %q", stepID, ref)
+		}
+		seenRefs[ref] = struct{}{}
+		normalizedRefs = append(normalizedRefs, ref)
+	}
+	return normalizedConditions, normalizedRefs, nil
+}
+
+func validateTaskStepContracts(steps []TaskStep) error {
+	hasDAG := false
+	for _, step := range steps {
+		if len(step.DependsOn) > 0 {
+			hasDAG = true
+			break
+		}
+	}
+	if hasDAG {
+		for _, step := range steps {
+			if len(step.CompletionConditions) == 0 {
+				return fmt.Errorf("DAG task step %s requires at least one completion condition", step.ID)
+			}
+		}
+	}
+	return nil
 }
 
 func normalizeDependencyIDs(stepID string, values []string) ([]string, error) {

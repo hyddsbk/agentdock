@@ -46,6 +46,12 @@ func compactTaskSummary(task taskstate.Task) map[string]any {
 		if len(step.DependsOn) > 0 {
 			item["depends_on"] = append([]string(nil), step.DependsOn...)
 		}
+		if len(step.CompletionConditions) > 0 {
+			item["completion_conditions"] = append([]string(nil), step.CompletionConditions...)
+		}
+		if len(step.ContextRefs) > 0 {
+			item["context_refs"] = append([]string(nil), step.ContextRefs...)
+		}
 		steps = append(steps, item)
 		if currentStep == nil && step.Status == taskstate.StepInProgress {
 			currentStep = item

@@ -61,6 +61,9 @@ func (m *Manager) Install(ctx context.Context, req InstallRequest) (InstallResul
 	if err != nil {
 		return InstallResult{}, err
 	}
+	if err := enforceReleaseGate(packageDir, doc); err != nil {
+		return InstallResult{}, err
+	}
 	contentDigest, err := digestPackageContent(packageDir)
 	if err != nil {
 		return InstallResult{}, packageError(ErrInstallFailed, "content_digest", err)
@@ -87,9 +90,16 @@ func (m *Manager) Install(ctx context.Context, req InstallRequest) (InstallResul
 		return InstallResult{}, packageError(ErrInstallFailed, "copy", err)
 	}
 	metadata := struct {
-		Digest      string    `json:"digest"`
-		InstalledAt time.Time `json:"installed_at"`
-	}{Digest: contentDigest, InstalledAt: time.Now().UTC()}
+		Digest        string    `json:"digest"`
+		SourceDigest  string    `json:"source_digest"`
+		ContentDigest string    `json:"content_digest"`
+		InstalledAt   time.Time `json:"installed_at"`
+	}{
+		Digest:        contentDigest,
+		SourceDigest:  sourceDigest,
+		ContentDigest: contentDigest,
+		InstalledAt:   time.Now().UTC(),
+	}
 	metaData, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
 		_ = os.RemoveAll(staged)

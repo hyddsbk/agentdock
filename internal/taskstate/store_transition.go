@@ -242,6 +242,43 @@ func applyFinalReview(task *Task, input FinalReviewInput, now time.Time) error {
 			}
 		}
 	}
+	// Both outcome axes are mandatory and independently evidenced. A failed axis
+	// cannot be overridden by an overall pass verdict.
+	axes := []struct {
+		name  string
+		value *OutcomeAxis
+	}{{"intent_spec", input.IntentSpec}, {"engineering_policy", input.EngineeringPolicy}}
+	for _, axis := range axes {
+		if axis.value == nil {
+			return fmt.Errorf("final review requires %s outcome axis", axis.name)
+		}
+		axis.value.Status = strings.ToLower(strings.TrimSpace(axis.value.Status))
+		if axis.value.Status != FinalReviewPass && axis.value.Status != FinalReviewFailed {
+			return fmt.Errorf("%s status must be pass or failed", axis.name)
+		}
+		axis.value.Evidence = normalizeReviewItems(axis.value.Evidence)
+		axis.value.Findings = normalizeReviewItems(axis.value.Findings)
+		if len(axis.value.Evidence) > maxTaskReviewItems || len(axis.value.Findings) > maxTaskReviewItems {
+			return fmt.Errorf("%s review exceeds item limit", axis.name)
+		}
+		for _, item := range append(append([]string{}, axis.value.Evidence...), axis.value.Findings...) {
+			if err := validateTextLimit(axis.name+" item", item, maxTaskReviewItemBytes); err != nil {
+				return err
+			}
+		}
+		if axis.value.Status == FinalReviewPass && len(axis.value.Evidence) == 0 {
+			return fmt.Errorf("passing %s requires evidence", axis.name)
+		}
+		if axis.value.Status == FinalReviewFailed && len(axis.value.Findings) == 0 {
+			return fmt.Errorf("failed %s requires findings", axis.name)
+		}
+		if status == FinalReviewPass && axis.value.Status != FinalReviewPass {
+			return fmt.Errorf("overall pass requires %s to pass", axis.name)
+		}
+	}
+	if status == FinalReviewFailed && input.IntentSpec.Status == FinalReviewPass && input.EngineeringPolicy.Status == FinalReviewPass {
+		return errors.New("overall failure requires at least one failed outcome axis")
+	}
 	if status == FinalReviewPass {
 		if len(verifiedFacts) == 0 {
 			return errors.New("passing final review requires at least one verified fact")
@@ -249,15 +286,15 @@ func applyFinalReview(task *Task, input FinalReviewInput, now time.Time) error {
 		if pending := incompleteStepIDs(task.Steps); len(pending) > 0 {
 			return fmt.Errorf("passing final review requires all task steps completed: %s", strings.Join(pending, ", "))
 		}
-	} else if len(openRisks) == 0 && len(missingChecks) == 0 {
-		return errors.New("failed final review requires at least one risk")
+	} else if len(openRisks) == 0 && len(missingChecks) == 0 && len(input.IntentSpec.Findings) == 0 && len(input.EngineeringPolicy.Findings) == 0 {
+		return errors.New("failed final review requires at least one risk or axis finding")
 	}
 
 	reviewRevision, err := newOpaqueID("rev_")
 	if err != nil {
 		return err
 	}
-	task.FinalReview = &FinalReview{Status: status, Summary: summary, VerifiedFacts: verifiedFacts, OpenRisks: openRisks, MissingChecks: missingChecks, ReviewRevision: reviewRevision, ReviewedAt: now}
+	task.FinalReview = &FinalReview{IntentSpec: input.IntentSpec, EngineeringPolicy: input.EngineeringPolicy, Status: status, Summary: summary, VerifiedFacts: verifiedFacts, OpenRisks: openRisks, MissingChecks: missingChecks, ReviewRevision: reviewRevision, ReviewedAt: now}
 	task.EvolutionCandidates = nil
 	if status == FinalReviewPass {
 		task.Phase = PhaseCloseout

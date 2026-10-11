@@ -41,6 +41,14 @@ func (m *Manager) Validate(ctx context.Context, req ValidateRequest) (ValidateRe
 		result.addIssue(err)
 	} else {
 		result.Document = doc
+		violations, gateErr := validateReleaseGate(packageDir, doc)
+		if gateErr != nil {
+			result.addIssue(packageError(ErrReleaseGateFailed, "release_gate.scan", gateErr))
+		} else {
+			for _, violation := range violations {
+				result.addIssue(violation.packageError())
+			}
+		}
 	}
 	result.Valid = len(result.Issues) == 0
 	return result, nil

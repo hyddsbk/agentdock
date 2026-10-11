@@ -63,6 +63,7 @@ func TestTaskLifecyclePersistsLiveProgress(t *testing.T) {
 		Status:        FinalReviewPass,
 		Summary:       "all checks passed",
 		VerifiedFacts: []string{"health endpoint returned 200"},
+		IntentSpec:    &OutcomeAxis{Status: FinalReviewPass, Evidence: []string{"acceptance condition verified"}}, EngineeringPolicy: &OutcomeAxis{Status: FinalReviewPass, Evidence: []string{"technical checks verified"}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -103,7 +104,7 @@ func TestFinalReviewRequiresCompletedStepsAndVerifiedFacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewPass, Summary: "checked", VerifiedFacts: []string{"unit test passed"}})
+	_, err = store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewPass, Summary: "checked", VerifiedFacts: []string{"unit test passed"}, IntentSpec: &OutcomeAxis{Status: FinalReviewPass, Evidence: []string{"accepted"}}, EngineeringPolicy: &OutcomeAxis{Status: FinalReviewPass, Evidence: []string{"tested"}}})
 	if err == nil || !strings.Contains(err.Error(), "all task steps completed") {
 		t.Fatalf("expected incomplete-step error, got %v", err)
 	}
@@ -186,7 +187,7 @@ func TestBatchCheckpointUpdatesStepsAtomicallyAndSupportsRetry(t *testing.T) {
 	if _, err := store.BatchCheckpoint(task.ID, []string{"inspect", "test"}, "docs", "retry same checkpoint"); err != nil {
 		t.Fatalf("idempotent batch retry failed: %v", err)
 	}
-	task, err = store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewFailed, Summary: "docs pending", OpenRisks: []string{"documentation incomplete"}})
+	task, err = store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewFailed, Summary: "docs pending", OpenRisks: []string{"documentation incomplete"}, IntentSpec: &OutcomeAxis{Status: FinalReviewFailed, Findings: []string{"documentation incomplete"}}, EngineeringPolicy: &OutcomeAxis{Status: FinalReviewPass, Evidence: []string{"technical checks passed"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +260,7 @@ func TestBlockAndResumeUsesOneSummary(t *testing.T) {
 	if task.Status != StatusActive || task.Blocker != "" || task.Summary != "network restored" {
 		t.Fatalf("unexpected resumed state: %#v", task)
 	}
-	task, err = store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewPass, Summary: "ready to close", VerifiedFacts: []string{"network restored"}})
+	task, err = store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewPass, Summary: "ready to close", VerifiedFacts: []string{"network restored"}, IntentSpec: &OutcomeAxis{Status: FinalReviewPass, Evidence: []string{"network restored"}}, EngineeringPolicy: &OutcomeAxis{Status: FinalReviewPass, Evidence: []string{"connection test passed"}}})
 	if err != nil {
 		t.Fatal(err)
 	}

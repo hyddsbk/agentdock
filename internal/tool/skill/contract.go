@@ -7,15 +7,19 @@ const ToolPackage = "skill_package"
 func PackageInputSchema() map[string]any {
 	stringProp := toolcontract.String
 	return toolcontract.InputObject(map[string]any{
-		"action":    map[string]any{"type": "string", "description": "Skill package or isolated environment action.", "enum": []string{"validate", "install", "uninstall", "activate", "rollback", "env_set", "env_unset", "env_list"}},
-		"skill":     stringProp("Skill name for uninstall, activate, rollback, or environment management."),
-		"version":   stringProp("Installed Skill version for uninstall or activate. Omit for uninstall to remove the whole Skill."),
-		"key":       stringProp("Environment variable name for env_set/env_unset."),
-		"value":     stringProp("Environment variable value for env_set. Secret values are never returned."),
-		"source":    stringProp("Host path or HTTP(S) URL for validate/install."),
-		"digest":    stringProp("Optional expected SHA-256 digest for validate/install."),
-		"activate":  toolcontract.Boolean("Activate the installed version. Defaults to true."),
-		"max_bytes": toolcontract.Integer("Maximum validate/install package bytes."),
+		"action":                    map[string]any{"type": "string", "description": "Skill package or isolated environment action.", "enum": []string{"validate", "install", "uninstall", "activate", "rollback", "bind_provenance", "env_set", "env_unset", "env_list"}},
+		"skill":                     stringProp("Skill name for uninstall, activate, rollback, or environment management."),
+		"version":                   stringProp("Installed Skill version for uninstall or activate. Omit for uninstall to remove the whole Skill."),
+		"key":                       stringProp("Environment variable name for env_set/env_unset."),
+		"value":                     stringProp("Environment variable value for env_set. Secret values are never returned."),
+		"source":                    stringProp("Host path or HTTP(S) URL for validate/install."),
+		"digest":                    stringProp("Optional expected SHA-256 digest for validate/install."),
+		"activate":                  toolcontract.Boolean("Activate the installed version. Defaults to true."),
+		"max_bytes":                 toolcontract.Integer("Maximum validate/install package bytes."),
+		"plan_sha256":               stringProp("Validated adoption-plan SHA-256 for bind_provenance."),
+		"activation_receipt_sha256": stringProp("Terminal activate-version receipt SHA-256 for bind_provenance."),
+		"artifact_sha256":           stringProp("Receipt-chain package artifact SHA-256 for bind_provenance."),
+		"provenance_bundle":         map[string]any{"type": "object", "description": "Validated provenance bundle containing plan and receipt chain."},
 	}, "action")
 }
 

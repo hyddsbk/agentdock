@@ -1,7 +1,7 @@
 ---
 name: skill-installation
 description: 审查、安装、配置、激活、验证、更新、回滚和卸载 AgentDock Skill 时使用；负责来源校验、安全评估、环境配置和已安装版本验收。
-version: 1.2.1
+version: 1.3.0
 ---
 
 # Skill Installation
@@ -307,3 +307,24 @@ version: 1.2.1
 - 必填环境配置完整且未泄露值；
 - 有辅助脚本时只读 `status` 通过；
 - 环境和私有状态未被安装、更新或回滚错误覆盖。
+
+## P1.6/P1.7 provenance-bound installation
+
+For an install derived from a receipt-enabled project-due-diligence adoption plan, keep install and activation as distinct auditable steps:
+
+1. verify the exact package artifact and the existing receipt chain;
+2. install with skill_package install and activate=false;
+3. verify the returned source/package digest, then issue and verify the install-package receipt;
+4. explicitly activate the installed version and verify active_version, agentdock_context and skill:// readback;
+5. issue and verify the terminal activate-version receipt;
+6. run the P1.7 provenance verifier against the candidate plan/chain and installed package;
+7. only after that candidate verifies, call skill_package bind_provenance with plan_sha256, activation_receipt_sha256, artifact_sha256 and the complete provenance_bundle;
+8. run the registry-aware backtrace again and require VERIFIED.
+
+New installs record both source_digest and content_digest in AgentDock-owned .agentdock-install.json. The receipt/package digest and the installed-content digest are distinct and must never be substituted for each other.
+
+The registry field provenance_bound only means evidence is attached; it is not a trusted verdict. Missing receipts, missing legacy source_digest, registry/metadata disagreement, or installed-content drift must remain UNVERIFIED PROVENANCE.
+
+Ordinary activate and rollback clear the previous active provenance binding so an old terminal receipt cannot be reused as proof of a later activation event. A rollback remains UNVERIFIED PROVENANCE until fresh execution evidence for that activation is validated and rebound.
+
+For receipt-enabled installs, completion additionally requires a registry-aware provenance backtrace with status VERIFIED.

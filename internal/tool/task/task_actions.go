@@ -14,6 +14,8 @@ var taskActions = []string{"create", "list", "get", "checkpoint", "block", "resu
 var workflowTemplateActions = []string{"publish", "retire", "list", "get", "get_many", "match", "vector_index"}
 
 type taskManageInput struct {
+	IntentSpec           *taskstate.OutcomeAxis
+	EngineeringPolicy    *taskstate.OutcomeAxis
 	Action               string
 	Title                string
 	Goal                 string
@@ -76,6 +78,8 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 	}
 
 	input := taskManageInput{
+		IntentSpec:           request.IntentSpec,
+		EngineeringPolicy:    request.EngineeringPolicy,
 		Action:               strings.ToLower(strings.TrimSpace(request.Action)),
 		Title:                request.Title,
 		Goal:                 request.Goal,
@@ -256,7 +260,7 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 			task, evolutionWarning = s.refreshGuidanceBestEffort(ctx, task)
 		}
 	case "final_review":
-		review := taskstate.FinalReviewInput{Status: input.Status, Summary: input.Summary, VerifiedFacts: input.Verified, OpenRisks: input.Risks}
+		review := taskstate.FinalReviewInput{Status: input.Status, Summary: input.Summary, VerifiedFacts: input.Verified, OpenRisks: input.Risks, IntentSpec: input.IntentSpec, EngineeringPolicy: input.EngineeringPolicy}
 		task, err = s.tasks.FinalReview(input.TaskID, review)
 		if err == nil {
 			warnings := make([]string, 0, 2)

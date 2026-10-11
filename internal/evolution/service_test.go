@@ -106,7 +106,7 @@ func bindLearningCheck(t *testing.T, service *Service, task taskstate.Task, evol
 
 func passLearningTask(t *testing.T, tasks *taskstate.Store, task taskstate.Task, fact string) taskstate.Task {
 	t.Helper()
-	updated, err := tasks.FinalReview(task.ID, taskstate.FinalReviewInput{Status: taskstate.FinalReviewPass, Summary: "验证完成", VerifiedFacts: []string{fact}})
+	updated, err := tasks.FinalReview(task.ID, taskstate.FinalReviewInput{Status: taskstate.FinalReviewPass, Summary: "验证完成", VerifiedFacts: []string{fact}, IntentSpec: &taskstate.OutcomeAxis{Status: "pass", Evidence: []string{fact}}, EngineeringPolicy: &taskstate.OutcomeAxis{Status: "pass", Evidence: []string{"policy checks verified"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func passLearningTask(t *testing.T, tasks *taskstate.Store, task taskstate.Task,
 
 func failLearningTask(t *testing.T, tasks *taskstate.Store, task taskstate.Task, risk string) taskstate.Task {
 	t.Helper()
-	updated, err := tasks.FinalReview(task.ID, taskstate.FinalReviewInput{Status: taskstate.FinalReviewFailed, Summary: "验证失败", OpenRisks: []string{risk}})
+	updated, err := tasks.FinalReview(task.ID, taskstate.FinalReviewInput{Status: taskstate.FinalReviewFailed, Summary: "验证失败", OpenRisks: []string{risk}, IntentSpec: &taskstate.OutcomeAxis{Status: "failed", Findings: []string{risk}}, EngineeringPolicy: &taskstate.OutcomeAxis{Status: "pass", Evidence: []string{"policy verified"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,7 +293,7 @@ func TestSameTaskCannotVoteAgainAfterFinalReviewRevisionChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	bindLearningCheck(t, service, task, id, RelationSupport, RelationContradict)
-	task, err = tasks.FinalReview(task.ID, taskstate.FinalReviewInput{Status: taskstate.FinalReviewFailed, Summary: "第一次评审发现反例", OpenRisks: []string{"真实结果与经验矛盾"}})
+	task, err = tasks.FinalReview(task.ID, taskstate.FinalReviewInput{Status: taskstate.FinalReviewFailed, Summary: "第一次评审发现反例", OpenRisks: []string{"真实结果与经验矛盾"}, IntentSpec: &taskstate.OutcomeAxis{Status: "failed", Findings: []string{"review finding"}}, EngineeringPolicy: &taskstate.OutcomeAxis{Status: "pass", Evidence: []string{"policy verified"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -302,7 +302,7 @@ func TestSameTaskCannotVoteAgainAfterFinalReviewRevisionChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	task, err = tasks.FinalReview(task.ID, taskstate.FinalReviewInput{Status: taskstate.FinalReviewPass, Summary: "同一执行重新评审为通过", VerifiedFacts: []string{"同一执行现在被解释为支持"}})
+	task, err = tasks.FinalReview(task.ID, taskstate.FinalReviewInput{Status: taskstate.FinalReviewPass, Summary: "同一执行重新评审为通过", VerifiedFacts: []string{"同一执行现在被解释为支持"}, IntentSpec: &taskstate.OutcomeAxis{Status: "pass", Evidence: []string{"acceptance verified"}}, EngineeringPolicy: &taskstate.OutcomeAxis{Status: "pass", Evidence: []string{"policy verified"}}})
 	if err != nil {
 		t.Fatal(err)
 	}

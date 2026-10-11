@@ -22,6 +22,8 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 		"status":                map[string]any{"type": "string", "description": "Action-specific status: task list filter, single-step checkpoint status, or final review status.", "enum": []string{"active", "blocked", "completed", "pending", "in_progress", "pass", "failed"}},
 		"limit":                 boundedIntProp("Maximum tasks returned by list. Defaults to 50 and is capped at 200.", 1, 200),
 		"summary":               stringProp("Current progress, blocker, resume, or final review summary."),
+		"intent_spec":           map[string]any{"type": "object", "additionalProperties": false, "required": []string{"status"}, "properties": map[string]any{"status": map[string]any{"type": "string", "enum": []string{"pass", "failed"}}, "evidence": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "findings": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}}},
+		"engineering_policy":    map[string]any{"type": "object", "additionalProperties": false, "required": []string{"status"}, "properties": map[string]any{"status": map[string]any{"type": "string", "enum": []string{"pass", "failed"}}, "evidence": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "findings": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}}},
 		"verified":              map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Facts verified during final_review. Required when status=pass."},
 		"risks":                 map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Remaining risks. Required when final_review status=failed."},
 	}

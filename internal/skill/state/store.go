@@ -24,10 +24,21 @@ const (
 	transientLockErrorRetryTime = 500 * time.Millisecond
 )
 
+type ProvenanceBinding struct {
+	Schema                  string          `json:"schema"`
+	PlanSHA256              string          `json:"plan_sha256"`
+	ActivationReceiptSHA256 string          `json:"activation_receipt_sha256"`
+	ArtifactSHA256          string          `json:"artifact_sha256"`
+	InstalledContentSHA256  string          `json:"installed_content_sha256"`
+	Bundle                  json.RawMessage `json:"bundle"`
+	BoundAt                 time.Time       `json:"bound_at"`
+}
+
 type Selection struct {
-	ActiveVersion string    `json:"active_version,omitempty"`
-	History       []string  `json:"history,omitempty"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ActiveVersion string             `json:"active_version,omitempty"`
+	History       []string           `json:"history,omitempty"`
+	Provenance    *ProvenanceBinding `json:"provenance,omitempty"`
+	UpdatedAt     time.Time          `json:"updated_at"`
 }
 
 type Store struct{ root string }
@@ -249,12 +260,44 @@ func (s *Store) Activate(ctx context.Context, skill, version string) error {
 		state.History = prependUnique(state.History, state.ActiveVersion, 20)
 	}
 	state.ActiveVersion = version
+	// Any ordinary activation or rollback invalidates the previous active
+	// provenance binding. A version becomes VERIFIED only after an explicit
+	// receipt-backed provenance bind.
+	state.Provenance = nil
 	state.UpdatedAt = time.Now().UTC()
 
 	if err := s.save(skill, state); err != nil {
 		return err
 	}
 	return nil
+}
+
+func (s *Store) BindProvenance(ctx context.Context, skill, version string, binding ProvenanceBinding) error {
+	if err := validateIdentifier("skill", skill); err != nil {
+		return err
+	}
+	if err := validateIdentifier("version", version); err != nil {
+		return err
+	}
+	release, err := s.acquire(ctx, skill)
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	state, err := s.load(skill)
+	if err != nil {
+		return err
+	}
+	if state.ActiveVersion != version {
+		return fmt.Errorf("skill %s version %s is not active", skill, version)
+	}
+	if binding.BoundAt.IsZero() {
+		binding.BoundAt = time.Now().UTC()
+	}
+	state.Provenance = &binding
+	state.UpdatedAt = binding.BoundAt
+	return s.save(skill, state)
 }
 
 func (s *Store) PreviousVersion(skill string) (string, error) {

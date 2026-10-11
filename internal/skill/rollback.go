@@ -24,6 +24,9 @@ func (m *Manager) Rollback(ctx context.Context, skill string) (RollbackResult, e
 	if doc.Name != skill || doc.Version != previous {
 		return RollbackResult{}, packageError(ErrRollbackUnavailable, "rollback.verify", ErrDocumentIdentityMismatch{Skill: skill, Version: previous, Document: doc})
 	}
+	if err := enforceReleaseGate(previousPath, doc); err != nil {
+		return RollbackResult{}, err
+	}
 	if err := m.State.Activate(ctx, skill, previous); err != nil {
 		return RollbackResult{}, packageError(ErrRollbackUnavailable, "rollback.activate", err)
 	}

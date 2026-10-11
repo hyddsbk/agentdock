@@ -10,6 +10,44 @@ permissions:
   contents: read
 
 jobs:
+  seo-release-gate:
+    name: SEO corpus release gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Core
+        uses: actions/checkout@v4
+      - name: Checkout SEO Skill corpus
+        uses: actions/checkout@v4
+        with:
+          repository: uvwt/agentdock-skills
+          ref: 174b190a83789f085488f9e56d0c2b9e3ef7cbe8
+          path: .release-gate/agentdock-skills
+          persist-credentials: false
+      - name: Verify SEO corpus is published
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=".release-gate/agentdock-skills/skills"
+          test -f "$root/seo/SKILL.md" || { echo "::error::SEO corpus is missing from uvwt/agentdock-skills; publish P1.3 Skill corpus before releasing Core."; exit 1; }
+          while IFS= read -r skill; do
+            test -f "$root/$skill/SKILL.md" || { echo "::error::Missing required SEO Skill: $skill"; exit 1; }
+          done < packaging/seo-release-corpus.txt
+          count="$(find "$root" -mindepth 2 -maxdepth 2 -name SKILL.md | grep -E '/seo(-[^/]*)?/SKILL.md$' | wc -l)"
+          expected="$(wc -l < packaging/seo-release-corpus.txt)"
+          if [ "$count" -ne "$expected" ]; then
+            echo "::error::SEO corpus drift: found $count packages, expected $expected; update reviewed corpus manifest."
+            exit 1
+          fi
+          echo "Verified SEO corpus packages: $count"
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Enforce SEO release gate with full corpus
+        env:
+          AGENTDOCK_SEO_SKILLS_ROOT: ${{ github.workspace }}/.release-gate/agentdock-skills/skills
+        run: go test ./internal/skill -run '^Test(SEOReleaseGate|ValidateReportsSEOReleaseGateIssues|InstallCannotBypassSEOReleaseGate|ActivateRechecksSEOReleaseGate)' -count=1 -v
   go:
     name: Go check (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

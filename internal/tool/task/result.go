@@ -77,6 +77,7 @@ func compactTaskSummary(task taskstate.Task) map[string]any {
 		summary["final_review"] = map[string]any{
 			"status": task.FinalReview.Status, "summary": truncateString(task.FinalReview.Summary, 200),
 			"verified_count": len(task.FinalReview.VerifiedFacts), "risk_count": len(task.FinalReview.OpenRisks), "reviewed_at": task.FinalReview.ReviewedAt,
+			"intent_spec": task.FinalReview.IntentSpec, "engineering_policy": task.FinalReview.EngineeringPolicy,
 		}
 	}
 	if task.CompletedAt != nil {

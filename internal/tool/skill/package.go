@@ -2,6 +2,7 @@ package skill
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/url"
 	"strings"
@@ -17,24 +18,32 @@ type skillManager struct {
 }
 
 type skillToolInput struct {
-	Action   string
-	Skill    string
-	Version  string
-	Source   string
-	Digest   string
-	MaxBytes int64
-	Activate bool
+	Action                  string
+	Skill                   string
+	Version                 string
+	Source                  string
+	Digest                  string
+	MaxBytes                int64
+	Activate                bool
+	PlanSHA256              string
+	ActivationReceiptSHA256 string
+	ArtifactSHA256          string
+	ProvenanceBundle        map[string]any
 }
 
 func normalizePackageRequest(request PackageRequest) skillToolInput {
 	return skillToolInput{
-		Action:   strings.ToLower(strings.TrimSpace(request.Action)),
-		Skill:    strings.TrimSpace(request.Skill),
-		Version:  strings.TrimSpace(request.Version),
-		Source:   strings.TrimSpace(request.Source),
-		Digest:   strings.TrimSpace(request.Digest),
-		MaxBytes: int64(intValue(request.MaxBytes, 0)),
-		Activate: boolValue(request.Activate, true),
+		Action:                  strings.ToLower(strings.TrimSpace(request.Action)),
+		Skill:                   strings.TrimSpace(request.Skill),
+		Version:                 strings.TrimSpace(request.Version),
+		Source:                  strings.TrimSpace(request.Source),
+		Digest:                  strings.TrimSpace(request.Digest),
+		MaxBytes:                int64(intValue(request.MaxBytes, 0)),
+		Activate:                boolValue(request.Activate, true),
+		PlanSHA256:              strings.TrimSpace(request.PlanSHA256),
+		ActivationReceiptSHA256: strings.TrimSpace(request.ActivationReceiptSHA256),
+		ArtifactSHA256:          strings.TrimSpace(request.ArtifactSHA256),
+		ProvenanceBundle:        request.ProvenanceBundle,
 	}
 }
 
@@ -58,6 +67,8 @@ func (s *Service) Package(ctx context.Context, request PackageRequest) (Result, 
 		return s.skillActivate(ctx, input)
 	case "rollback":
 		return s.skillRollback(ctx, input)
+	case "bind_provenance":
+		return s.skillBindProvenance(ctx, input)
 	case "env_set", "env_unset", "env_list":
 		skill, err := input.requiredSkill()
 		if err != nil {
@@ -67,7 +78,7 @@ func (s *Service) Package(ctx context.Context, request PackageRequest) (Result, 
 	default:
 		return nil, toolErrorDetails("INVALID_ACTION", "unsupported skill_package action", "validation", map[string]any{
 			"action":  input.Action,
-			"allowed": []string{"validate", "install", "uninstall", "activate", "rollback", "env_set", "env_unset", "env_list"},
+			"allowed": []string{"validate", "install", "uninstall", "activate", "rollback", "bind_provenance", "env_set", "env_unset", "env_list"},
 		})
 	}
 }
@@ -97,11 +108,12 @@ func (s *Service) list() (Result, error) {
 		}
 		_, isBundled := bundled[name]
 		items = append(items, map[string]any{
-			"skill":          name,
-			"versions":       versions,
-			"active_version": selection.ActiveVersion,
-			"bundled":        isBundled,
-			"updated_at":     selection.UpdatedAt,
+			"skill":            name,
+			"versions":         versions,
+			"active_version":   selection.ActiveVersion,
+			"provenance_bound": selection.Provenance != nil,
+			"bundled":          isBundled,
+			"updated_at":       selection.UpdatedAt,
 		})
 	}
 	return Result{"action": "list", "count": len(items), "skills": items}, nil
@@ -224,6 +236,35 @@ func (s *Service) skillActivate(ctx context.Context, input skillToolInput) (Resu
 		return nil, skillToolError(err)
 	}
 	return Result{"action": "activate", "result": result}, nil
+}
+
+func (s *Service) skillBindProvenance(ctx context.Context, input skillToolInput) (Result, error) {
+	skill, err := input.requiredSkill()
+	if err != nil {
+		return nil, err
+	}
+	if input.Version == "" {
+		return nil, toolErrorDetails("VALIDATION_ERROR", "version is required for bind_provenance", "validation", map[string]any{"field": "version"})
+	}
+	if input.ProvenanceBundle == nil {
+		return nil, toolErrorDetails("VALIDATION_ERROR", "provenance_bundle is required for bind_provenance", "validation", map[string]any{"field": "provenance_bundle"})
+	}
+	bundle, err := json.Marshal(input.ProvenanceBundle)
+	if err != nil {
+		return nil, toolErrorDetails("VALIDATION_ERROR", "provenance_bundle must be JSON serializable", "validation", map[string]any{"field": "provenance_bundle"})
+	}
+	result, err := s.manager.BindProvenance(ctx, skills.BindProvenanceRequest{
+		Skill:                   skill,
+		Version:                 input.Version,
+		PlanSHA256:              input.PlanSHA256,
+		ActivationReceiptSHA256: input.ActivationReceiptSHA256,
+		ArtifactSHA256:          input.ArtifactSHA256,
+		Bundle:                  json.RawMessage(bundle),
+	})
+	if err != nil {
+		return nil, skillToolError(err)
+	}
+	return Result{"action": "bind_provenance", "result": result}, nil
 }
 
 func (s *Service) skillRollback(ctx context.Context, input skillToolInput) (Result, error) {

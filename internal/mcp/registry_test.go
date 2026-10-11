@@ -183,8 +183,8 @@ func TestRecallBootstrapIsNotModelFacing(t *testing.T) {
 
 func TestSkillPackageSchemaAndRemovedRuntimeTools(t *testing.T) {
 	packageProps := schemaProperties(t, "skill_package")
-	assertSameStrings(t, enumStrings(t, packageProps["action"]), []string{"validate", "install", "uninstall", "activate", "rollback", "env_set", "env_unset", "env_list"})
-	for _, name := range []string{"source", "digest", "activate", "max_bytes", "skill", "version", "key", "value"} {
+	assertSameStrings(t, enumStrings(t, packageProps["action"]), []string{"validate", "install", "uninstall", "activate", "rollback", "bind_provenance", "env_set", "env_unset", "env_list"})
+	for _, name := range []string{"source", "digest", "activate", "max_bytes", "skill", "version", "key", "value", "plan_sha256", "activation_receipt_sha256", "artifact_sha256", "provenance_bundle"} {
 		if _, ok := packageProps[name]; !ok {
 			t.Fatalf("skill_package input schema missing %q", name)
 		}

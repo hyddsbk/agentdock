@@ -35,8 +35,10 @@ const (
 	ErrInvalidPackage      = "INVALID_SKILL_PACKAGE"
 	ErrDigestMismatch      = "SKILL_DIGEST_MISMATCH"
 	ErrDocumentInvalid     = "SKILL_DOCUMENT_INVALID"
+	ErrReleaseGateFailed   = "SKILL_RELEASE_GATE_FAILED"
 	ErrInstallFailed       = "SKILL_INSTALL_FAILED"
 	ErrUninstallFailed     = "SKILL_UNINSTALL_FAILED"
 	ErrActivateFailed      = "SKILL_ACTIVATE_FAILED"
 	ErrRollbackUnavailable = "SKILL_ROLLBACK_UNAVAILABLE"
+	ErrProvenanceFailed    = "SKILL_PROVENANCE_FAILED"
 )

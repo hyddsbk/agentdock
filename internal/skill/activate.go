@@ -27,6 +27,9 @@ func (m *Manager) Activate(ctx context.Context, skill, version string) (Activate
 	if doc.Name != skill || doc.Version != version {
 		return ActivateResult{}, packageError(ErrActivateFailed, "activate.verify", ErrDocumentIdentityMismatch{Skill: skill, Version: version, Document: doc})
 	}
+	if err := enforceReleaseGate(packageDir, doc); err != nil {
+		return ActivateResult{}, err
+	}
 	if err := m.State.Activate(ctx, skill, version); err != nil {
 		return ActivateResult{}, packageError(ErrActivateFailed, "activate.state", err)
 	}

@@ -3,6 +3,7 @@ package config
 import "testing"
 
 func TestDisabledACPIgnoresResidualEnvironment(t *testing.T) {
+	setTestUserHome(t, t.TempDir())
 	t.Setenv("AGENTDOCK_ACP_ENABLED", "false")
 	t.Setenv("AGENTDOCK_ACP_AGENT", "bad\nname")
 	t.Setenv("AGENTDOCK_ACP_COMMAND", "relative-adapter")
@@ -15,7 +16,6 @@ func TestDisabledACPIgnoresResidualEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("disabled ACP parsed residual configuration: %v", err)
 	}
-	setTestUserHome(t, t.TempDir())
 	if err := cfg.Normalize(); err != nil {
 		t.Fatalf("disabled ACP normalized residual configuration: %v", err)
 	}

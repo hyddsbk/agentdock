@@ -39,7 +39,7 @@ func TestTaskManageLifecycleAndRestartRecovery(t *testing.T) {
 	}
 	if _, err := rt.manageTest(context.Background(), map[string]any{
 		"action": "final_review", "task_id": taskID, "status": "pass", "summary": "final verification passed",
-		"verified": []string{"health endpoint returned 200"}, "risks": []string{},
+		"verified": []string{"health endpoint returned 200"}, "risks": []string{}, "intent_spec": map[string]any{"status": "pass", "evidence": []string{"acceptance verified"}}, "engineering_policy": map[string]any{"status": "pass", "evidence": []string{"technical checks passed"}},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +244,7 @@ func TestTaskManageFinalReviewDoesNotAutoCompleteSteps(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = rt.manageTest(context.Background(), map[string]any{
-		"action": "final_review", "task_id": created["task_id"], "status": "pass", "summary": "claimed done", "verified": []string{"claim"},
+		"action": "final_review", "task_id": created["task_id"], "status": "pass", "summary": "claimed done", "verified": []string{"claim"}, "intent_spec": map[string]any{"status": "pass", "evidence": []string{"claim"}}, "engineering_policy": map[string]any{"status": "pass", "evidence": []string{"checks"}},
 	})
 	if err == nil || !strings.Contains(err.Error(), "all task steps completed") {
 		t.Fatalf("final_review should reject incomplete steps: %v", err)

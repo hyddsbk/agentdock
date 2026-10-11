@@ -6,9 +6,12 @@ import (
 )
 
 const (
-	SchemaVersion     = 1
-	FinalReviewPass   = "pass"
-	FinalReviewFailed = "failed"
+	SchemaVersion           = 4
+	legacySchemaVersion     = 1
+	dependencySchemaVersion = 2
+	contextSchemaVersion    = 3
+	FinalReviewPass         = "pass"
+	FinalReviewFailed       = "failed"
 
 	maxTaskTitleBytes        = 512
 	maxTaskGoalBytes         = 16 << 10
@@ -55,23 +58,23 @@ type OutcomeAxis struct {
 }
 
 type FinalReviewInput struct {
-	IntentSpec        *OutcomeAxis `json:"intent_spec,omitempty"`
-	EngineeringPolicy *OutcomeAxis `json:"engineering_policy,omitempty"`
 	Status            string       `json:"status"`
 	Summary           string       `json:"summary"`
 	VerifiedFacts     []string     `json:"verified_facts,omitempty"`
 	OpenRisks         []string     `json:"open_risks,omitempty"`
 	MissingChecks     []string     `json:"missing_checks,omitempty"`
+	IntentSpec        *OutcomeAxis `json:"intent_spec,omitempty"`
+	EngineeringPolicy *OutcomeAxis `json:"engineering_policy,omitempty"`
 }
 
 type FinalReview struct {
-	IntentSpec        *OutcomeAxis `json:"intent_spec,omitempty"`
-	EngineeringPolicy *OutcomeAxis `json:"engineering_policy,omitempty"`
 	Status            string       `json:"status"`
 	Summary           string       `json:"summary"`
 	VerifiedFacts     []string     `json:"verified_facts,omitempty"`
 	OpenRisks         []string     `json:"open_risks,omitempty"`
 	MissingChecks     []string     `json:"missing_checks,omitempty"`
+	IntentSpec        *OutcomeAxis `json:"intent_spec,omitempty"`
+	EngineeringPolicy *OutcomeAxis `json:"engineering_policy,omitempty"`
 	ReviewRevision    string       `json:"review_revision"`
 	ReviewedAt        time.Time    `json:"reviewed_at"`
 }

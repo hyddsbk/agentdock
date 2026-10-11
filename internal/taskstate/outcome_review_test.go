@@ -33,13 +33,13 @@ func TestTwoAxisOutcomeReviewGate(t *testing.T) {
 	}{
 		{"missing intent", func(r *FinalReviewInput) { r.IntentSpec = nil }, "intent_spec"},
 		{"missing engineering", func(r *FinalReviewInput) { r.EngineeringPolicy = nil }, "engineering_policy"},
-		{"unsupported intent pass", func(r *FinalReviewInput) { r.IntentSpec.Evidence = nil }, "requires evidence"},
+		{"unsupported intent pass", func(r *FinalReviewInput) { r.IntentSpec.Evidence = nil }, "requires at least one evidence item"},
 		{"failed engineering overrides pass", func(r *FinalReviewInput) {
 			r.EngineeringPolicy = axis(FinalReviewFailed, nil, []string{"policy violation"})
-		}, "overall pass requires"},
+		}, "requires both outcome axes to pass"},
 		{"failed intent overrides pass", func(r *FinalReviewInput) {
 			r.IntentSpec = axis(FinalReviewFailed, nil, []string{"missing requirement"})
-		}, "overall pass requires"},
+		}, "requires both outcome axes to pass"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

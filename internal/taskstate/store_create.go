@@ -79,7 +79,15 @@ func (s *Store) CreateWithContext(title, goal, project, device string, condition
 	}
 	phase := PhaseCheck
 	if len(taskSteps) > 0 {
-		phase = taskSteps[0].Phase
+		readyIDs := ReadyStepIDs(Task{Status: StatusActive, Steps: taskSteps})
+		if len(readyIDs) > 0 {
+			for _, step := range taskSteps {
+				if step.ID == readyIDs[0] {
+					phase = step.Phase
+					break
+				}
+			}
+		}
 	}
 	task := Task{
 		SchemaVersion:     SchemaVersion,

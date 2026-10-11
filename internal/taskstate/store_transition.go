@@ -45,11 +45,9 @@ func (s *Store) Checkpoint(id, stepID, status, summary string) (Task, error) {
 		if !validStepTransition(step.Status, status) {
 			return fmt.Errorf("cannot move step %s from %s to %s", step.ID, step.Status, status)
 		}
-		if status == StepInProgress {
-			for i := range task.Steps {
-				if i != stepIndex && task.Steps[i].Status == StepInProgress {
-					return fmt.Errorf("step %s is already in progress", task.Steps[i].ID)
-				}
+		if status == StepInProgress || status == StepCompleted {
+			if blocked := unsatisfiedStepDependencies(task.Steps, *step, nil); len(blocked) > 0 {
+				return fmt.Errorf("step %s is blocked by incomplete dependencies: %s", step.ID, strings.Join(blocked, ", "))
 			}
 		}
 		step.Status = status
@@ -103,6 +101,12 @@ func (s *Store) BatchCheckpoint(id string, completedStepIDs []string, currentSte
 			}
 			completedSet[stepID] = struct{}{}
 		}
+		for _, stepID := range completedStepIDs {
+			step := task.Steps[stepIndexes[stepID]]
+			if blocked := unsatisfiedStepDependencies(task.Steps, step, completedSet); len(blocked) > 0 {
+				return fmt.Errorf("step %s is blocked by incomplete dependencies: %s", step.ID, strings.Join(blocked, ", "))
+			}
+		}
 
 		currentStepIndex := -1
 		if currentStepID != "" {
@@ -116,13 +120,8 @@ func (s *Store) BatchCheckpoint(id string, completedStepIDs []string, currentSte
 			if !validStepTransition(task.Steps[stepIndex].Status, StepInProgress) {
 				return fmt.Errorf("cannot move step %s from %s to %s", currentStepID, task.Steps[stepIndex].Status, StepInProgress)
 			}
-			for i := range task.Steps {
-				if task.Steps[i].Status != StepInProgress || i == stepIndex {
-					continue
-				}
-				if _, completing := completedSet[task.Steps[i].ID]; !completing {
-					return fmt.Errorf("step %s is already in progress", task.Steps[i].ID)
-				}
+			if blocked := unsatisfiedStepDependencies(task.Steps, task.Steps[stepIndex], completedSet); len(blocked) > 0 {
+				return fmt.Errorf("step %s is blocked by incomplete dependencies: %s", currentStepID, strings.Join(blocked, ", "))
 			}
 			currentStepIndex = stepIndex
 		}
@@ -242,59 +241,41 @@ func applyFinalReview(task *Task, input FinalReviewInput, now time.Time) error {
 			}
 		}
 	}
-	// Both outcome axes are mandatory and independently evidenced. A failed axis
-	// cannot be overridden by an overall pass verdict.
-	axes := []struct {
-		name  string
-		value *OutcomeAxis
-	}{{"intent_spec", input.IntentSpec}, {"engineering_policy", input.EngineeringPolicy}}
-	for _, axis := range axes {
-		if axis.value == nil {
-			return fmt.Errorf("final review requires %s outcome axis", axis.name)
-		}
-		axis.value.Status = strings.ToLower(strings.TrimSpace(axis.value.Status))
-		if axis.value.Status != FinalReviewPass && axis.value.Status != FinalReviewFailed {
-			return fmt.Errorf("%s status must be pass or failed", axis.name)
-		}
-		axis.value.Evidence = normalizeReviewItems(axis.value.Evidence)
-		axis.value.Findings = normalizeReviewItems(axis.value.Findings)
-		if len(axis.value.Evidence) > maxTaskReviewItems || len(axis.value.Findings) > maxTaskReviewItems {
-			return fmt.Errorf("%s review exceeds item limit", axis.name)
-		}
-		for _, item := range append(append([]string{}, axis.value.Evidence...), axis.value.Findings...) {
-			if err := validateTextLimit(axis.name+" item", item, maxTaskReviewItemBytes); err != nil {
-				return err
-			}
-		}
-		if axis.value.Status == FinalReviewPass && len(axis.value.Evidence) == 0 {
-			return fmt.Errorf("passing %s requires evidence", axis.name)
-		}
-		if axis.value.Status == FinalReviewFailed && len(axis.value.Findings) == 0 {
-			return fmt.Errorf("failed %s requires findings", axis.name)
-		}
-		if status == FinalReviewPass && axis.value.Status != FinalReviewPass {
-			return fmt.Errorf("overall pass requires %s to pass", axis.name)
-		}
+	intentSpec, err := normalizeOutcomeAxis("intent_spec", input.IntentSpec)
+	if err != nil {
+		return err
 	}
-	if status == FinalReviewFailed && input.IntentSpec.Status == FinalReviewPass && input.EngineeringPolicy.Status == FinalReviewPass {
-		return errors.New("overall failure requires at least one failed outcome axis")
+	engineeringPolicy, err := normalizeOutcomeAxis("engineering_policy", input.EngineeringPolicy)
+	if err != nil {
+		return err
+	}
+	if intentSpec == nil || engineeringPolicy == nil {
+		return errors.New("final review requires both intent_spec and engineering_policy outcome axes")
 	}
 	if status == FinalReviewPass {
+		if intentSpec.Status != FinalReviewPass || engineeringPolicy.Status != FinalReviewPass {
+			return errors.New("passing final review requires both outcome axes to pass")
+		}
 		if len(verifiedFacts) == 0 {
 			return errors.New("passing final review requires at least one verified fact")
 		}
 		if pending := incompleteStepIDs(task.Steps); len(pending) > 0 {
 			return fmt.Errorf("passing final review requires all task steps completed: %s", strings.Join(pending, ", "))
 		}
-	} else if len(openRisks) == 0 && len(missingChecks) == 0 && len(input.IntentSpec.Findings) == 0 && len(input.EngineeringPolicy.Findings) == 0 {
-		return errors.New("failed final review requires at least one risk or axis finding")
+	} else {
+		if intentSpec.Status != FinalReviewFailed && engineeringPolicy.Status != FinalReviewFailed {
+			return errors.New("failed final review requires at least one failed outcome axis")
+		}
+		if len(openRisks) == 0 && len(missingChecks) == 0 {
+			return errors.New("failed final review requires at least one risk")
+		}
 	}
 
 	reviewRevision, err := newOpaqueID("rev_")
 	if err != nil {
 		return err
 	}
-	task.FinalReview = &FinalReview{IntentSpec: input.IntentSpec, EngineeringPolicy: input.EngineeringPolicy, Status: status, Summary: summary, VerifiedFacts: verifiedFacts, OpenRisks: openRisks, MissingChecks: missingChecks, ReviewRevision: reviewRevision, ReviewedAt: now}
+	task.FinalReview = &FinalReview{Status: status, Summary: summary, VerifiedFacts: verifiedFacts, OpenRisks: openRisks, MissingChecks: missingChecks, IntentSpec: intentSpec, EngineeringPolicy: engineeringPolicy, ReviewRevision: reviewRevision, ReviewedAt: now}
 	task.EvolutionCandidates = nil
 	if status == FinalReviewPass {
 		task.Phase = PhaseCloseout
@@ -302,6 +283,30 @@ func applyFinalReview(task *Task, input FinalReviewInput, now time.Time) error {
 	task.Summary = summary
 	appendTaskEvent(task, Event{Type: "final_review", Summary: status + ": " + summary, CreatedAt: now})
 	return nil
+}
+
+func normalizeOutcomeAxis(label string, input *OutcomeAxis) (*OutcomeAxis, error) {
+	if input == nil {
+		return nil, nil
+	}
+	status := strings.ToLower(strings.TrimSpace(input.Status))
+	if status != FinalReviewPass && status != FinalReviewFailed {
+		return nil, fmt.Errorf("%s status must be pass or failed", label)
+	}
+	evidence := normalizeReviewItems(input.Evidence)
+	findings := normalizeReviewItems(input.Findings)
+	for _, item := range append(append([]string{}, evidence...), findings...) {
+		if err := validateTextLimit("final review "+label+" item", item, maxTaskReviewItemBytes); err != nil {
+			return nil, err
+		}
+	}
+	if status == FinalReviewPass && len(evidence) == 0 {
+		return nil, fmt.Errorf("passing %s requires at least one evidence item", label)
+	}
+	if status == FinalReviewFailed && len(findings) == 0 {
+		return nil, fmt.Errorf("failed %s requires at least one finding", label)
+	}
+	return &OutcomeAxis{Status: status, Evidence: evidence, Findings: findings}, nil
 }
 
 func completeTask(task *Task, summary string, now time.Time, emitEvent bool) error {

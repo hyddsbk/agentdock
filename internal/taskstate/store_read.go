@@ -143,7 +143,11 @@ func decodeTask(data []byte, label string) (Task, error) {
 	if err := json.Unmarshal(data, &task); err != nil {
 		return Task{}, fmt.Errorf("decode task %s: %w", label, err)
 	}
-	if task.SchemaVersion != SchemaVersion {
+	switch task.SchemaVersion {
+	case legacySchemaVersion, dependencySchemaVersion, contextSchemaVersion:
+		task.SchemaVersion = SchemaVersion
+	case SchemaVersion:
+	default:
 		return Task{}, fmt.Errorf("unsupported task schema version %d", task.SchemaVersion)
 	}
 	if len(task.Events) > maxTaskEvents {

@@ -3,8 +3,12 @@ package task
 import "github.com/uvwt/agentdock/internal/taskstate"
 
 type StepRequest struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
+	ID                   string                 `json:"id"`
+	Title                string                 `json:"title"`
+	DependsOn            []string               `json:"depends_on,omitempty"`
+	CompletionConditions []string               `json:"completion_conditions,omitempty"`
+	ContextRefs          []string               `json:"context_refs,omitempty"`
+	Quality              *taskstate.StepQuality `json:"quality,omitempty"`
 }
 
 type LearningCheckRequest struct {
@@ -16,8 +20,6 @@ type LearningCheckRequest struct {
 // ManageRequest 只表达 task_manage 对模型公开的输入字段。
 // 持久化状态中的 phase、bound_at 等内部字段在规范化阶段由 Task 域模型补齐，不能从边界注入。
 type ManageRequest struct {
-	IntentSpec           *taskstate.OutcomeAxis `json:"intent_spec,omitempty"`
-	EngineeringPolicy    *taskstate.OutcomeAxis `json:"engineering_policy,omitempty"`
 	Action               string                 `json:"action"`
 	Title                string                 `json:"title,omitempty"`
 	Goal                 string                 `json:"goal,omitempty"`
@@ -37,6 +39,8 @@ type ManageRequest struct {
 	Summary              string                 `json:"summary,omitempty"`
 	Verified             []string               `json:"verified,omitempty"`
 	Risks                []string               `json:"risks,omitempty"`
+	IntentSpec           *taskstate.OutcomeAxis `json:"intent_spec,omitempty"`
+	EngineeringPolicy    *taskstate.OutcomeAxis `json:"engineering_policy,omitempty"`
 }
 
 // WorkflowRequest 是 workflow_template_manage 的强类型输入。

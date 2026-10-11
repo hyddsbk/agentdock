@@ -13,6 +13,14 @@ import (
 	"time"
 )
 
+func passingOutcomeAxes() (*OutcomeAxis, *OutcomeAxis) {
+	return &OutcomeAxis{Status: FinalReviewPass, Evidence: []string{"intent verified"}}, &OutcomeAxis{Status: FinalReviewPass, Evidence: []string{"policy verified"}}
+}
+
+func failedOutcomeAxes() (*OutcomeAxis, *OutcomeAxis) {
+	return &OutcomeAxis{Status: FinalReviewFailed, Findings: []string{"intent gap"}}, &OutcomeAxis{Status: FinalReviewPass, Evidence: []string{"policy verified"}}
+}
+
 func TestTaskLifecyclePersistsLiveProgress(t *testing.T) {
 	root := t.TempDir()
 	store, err := New(root)
@@ -60,10 +68,11 @@ func TestTaskLifecyclePersistsLiveProgress(t *testing.T) {
 		t.Fatal(err)
 	}
 	task, err = store.FinalReview(task.ID, FinalReviewInput{
-		Status:        FinalReviewPass,
-		Summary:       "all checks passed",
-		VerifiedFacts: []string{"health endpoint returned 200"},
-		IntentSpec:    &OutcomeAxis{Status: FinalReviewPass, Evidence: []string{"acceptance condition verified"}}, EngineeringPolicy: &OutcomeAxis{Status: FinalReviewPass, Evidence: []string{"technical checks verified"}},
+		Status:            FinalReviewPass,
+		Summary:           "all checks passed",
+		VerifiedFacts:     []string{"health endpoint returned 200"},
+		IntentSpec:        func() *OutcomeAxis { a, _ := passingOutcomeAxes(); return a }(),
+		EngineeringPolicy: func() *OutcomeAxis { _, a := passingOutcomeAxes(); return a }(),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -104,17 +113,20 @@ func TestFinalReviewRequiresCompletedStepsAndVerifiedFacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewPass, Summary: "checked", VerifiedFacts: []string{"unit test passed"}, IntentSpec: &OutcomeAxis{Status: FinalReviewPass, Evidence: []string{"accepted"}}, EngineeringPolicy: &OutcomeAxis{Status: FinalReviewPass, Evidence: []string{"tested"}}})
+	intent, policy := passingOutcomeAxes()
+	_, err = store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewPass, Summary: "checked", VerifiedFacts: []string{"unit test passed"}, IntentSpec: intent, EngineeringPolicy: policy})
 	if err == nil || !strings.Contains(err.Error(), "all task steps completed") {
 		t.Fatalf("expected incomplete-step error, got %v", err)
 	}
-	if _, err := store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewFailed, Summary: "not ready"}); err == nil {
+	failedIntent, passedPolicy := failedOutcomeAxes()
+	if _, err := store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewFailed, Summary: "not ready", IntentSpec: failedIntent, EngineeringPolicy: passedPolicy}); err == nil {
 		t.Fatal("failed final review accepted no risks")
 	}
 	if _, err := store.Checkpoint(task.ID, "repair", StepCompleted, "repair complete"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewPass, Summary: "checked"}); err == nil {
+	intent, policy = passingOutcomeAxes()
+	if _, err := store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewPass, Summary: "checked", IntentSpec: intent, EngineeringPolicy: policy}); err == nil {
 		t.Fatal("passing final review accepted no verified facts")
 	}
 }
@@ -137,8 +149,8 @@ func TestCheckpointAllowsOnlyForwardProgress(t *testing.T) {
 	if _, err := store.Checkpoint(task.ID, "code", StepInProgress, "coding"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Checkpoint(task.ID, "test", StepInProgress, "testing"); err == nil {
-		t.Fatal("accepted a second in-progress step")
+	if _, err := store.Checkpoint(task.ID, "test", StepInProgress, "testing"); err != nil {
+		t.Fatalf("independent frontier step could not run concurrently: %v", err)
 	}
 	if _, err := store.Checkpoint(task.ID, "code", StepCompleted, "code complete"); err != nil {
 		t.Fatal(err)
@@ -187,7 +199,8 @@ func TestBatchCheckpointUpdatesStepsAtomicallyAndSupportsRetry(t *testing.T) {
 	if _, err := store.BatchCheckpoint(task.ID, []string{"inspect", "test"}, "docs", "retry same checkpoint"); err != nil {
 		t.Fatalf("idempotent batch retry failed: %v", err)
 	}
-	task, err = store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewFailed, Summary: "docs pending", OpenRisks: []string{"documentation incomplete"}, IntentSpec: &OutcomeAxis{Status: FinalReviewFailed, Findings: []string{"documentation incomplete"}}, EngineeringPolicy: &OutcomeAxis{Status: FinalReviewPass, Evidence: []string{"technical checks passed"}}})
+	failedIntent, passedPolicy := failedOutcomeAxes()
+	task, err = store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewFailed, Summary: "docs pending", OpenRisks: []string{"documentation incomplete"}, IntentSpec: failedIntent, EngineeringPolicy: passedPolicy})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,15 +238,15 @@ func TestBatchCheckpointUpdatesStepsAtomicallyAndSupportsRetry(t *testing.T) {
 	if _, err := store.Checkpoint(atomicTask.ID, "code", StepInProgress, "coding"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.BatchCheckpoint(atomicTask.ID, nil, "docs", "switch current step"); err == nil || !strings.Contains(err.Error(), "already in progress") {
-		t.Fatalf("accepted a second in-progress step: %v", err)
+	if _, err := store.BatchCheckpoint(atomicTask.ID, nil, "docs", "start independent docs"); err != nil {
+		t.Fatalf("independent batch frontier step could not run concurrently: %v", err)
 	}
 	loaded, err = store.Get(atomicTask.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.Steps[0].Status != StepInProgress || loaded.Steps[1].Status != StepPending {
-		t.Fatalf("rejected current-step switch changed task: %#v", loaded.Steps)
+	if loaded.Steps[0].Status != StepInProgress || loaded.Steps[1].Status != StepInProgress {
+		t.Fatalf("parallel frontier progress was not preserved: %#v", loaded.Steps)
 	}
 }
 
@@ -260,7 +273,8 @@ func TestBlockAndResumeUsesOneSummary(t *testing.T) {
 	if task.Status != StatusActive || task.Blocker != "" || task.Summary != "network restored" {
 		t.Fatalf("unexpected resumed state: %#v", task)
 	}
-	task, err = store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewPass, Summary: "ready to close", VerifiedFacts: []string{"network restored"}, IntentSpec: &OutcomeAxis{Status: FinalReviewPass, Evidence: []string{"network restored"}}, EngineeringPolicy: &OutcomeAxis{Status: FinalReviewPass, Evidence: []string{"connection test passed"}}})
+	intent, policy := passingOutcomeAxes()
+	task, err = store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewPass, Summary: "ready to close", VerifiedFacts: []string{"network restored"}, IntentSpec: intent, EngineeringPolicy: policy})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,6 +328,180 @@ func TestCreateRejectsInvalidSteps(t *testing.T) {
 	)
 	if err == nil || !strings.Contains(err.Error(), "duplicate task step") {
 		t.Fatalf("expected duplicate-step error, got %v", err)
+	}
+}
+
+func TestCreateRejectsInvalidDependencyGraphs(t *testing.T) {
+	tests := []struct {
+		name  string
+		steps []TaskStepInput
+		want  string
+	}{
+		{name: "unknown", steps: []TaskStepInput{{ID: "a", Title: "A", DependsOn: []string{"missing"}}}, want: "unknown step"},
+		{name: "self", steps: []TaskStepInput{{ID: "a", Title: "A", DependsOn: []string{"a"}}}, want: "cannot depend on itself"},
+		{name: "duplicate", steps: []TaskStepInput{{ID: "a", Title: "A"}, {ID: "b", Title: "B", DependsOn: []string{"a", "a"}}}, want: "duplicate dependency"},
+		{name: "whitespace", steps: []TaskStepInput{{ID: "a", Title: "A"}, {ID: "b", Title: "B", DependsOn: []string{" a"}}}, want: "invalid dependency"},
+		{name: "cycle", steps: []TaskStepInput{{ID: "a", Title: "A", DependsOn: []string{"b"}}, {ID: "b", Title: "B", DependsOn: []string{"a"}}}, want: "contains a cycle"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store, err := New(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = store.Create("Invalid graph", "reject invalid graph", []string{"rejected"}, tt.steps, nil)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Create() error = %v, want substring %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestCreateRejectsDAGWithoutPerStepCompletionConditions(t *testing.T) {
+	store, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.Create("Missing step criteria", "reject incomplete DAG contract", []string{"rejected"}, []TaskStepInput{
+		{ID: "inspect", Title: "Inspect", CompletionConditions: []string{"Inspection is complete."}},
+		{ID: "implement", Title: "Implement", DependsOn: []string{"inspect"}},
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "requires at least one completion condition") {
+		t.Fatalf("expected missing step completion condition error, got %v", err)
+	}
+}
+
+func TestCreateRejectsInvalidStepContextContracts(t *testing.T) {
+	store, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name string
+		step TaskStepInput
+		want string
+	}{
+		{name: "duplicate_ref", step: TaskStepInput{ID: "work", Title: "Work", ContextRefs: []string{"recall://a", "recall://a"}}, want: "duplicate context ref"},
+		{name: "blank_ref", step: TaskStepInput{ID: "work", Title: "Work", ContextRefs: []string{" "}}, want: "invalid context ref"},
+		{name: "duplicate_condition", step: TaskStepInput{ID: "work", Title: "Work", CompletionConditions: []string{"Done", "Done"}}, want: "non-empty and distinct"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := store.Create("Invalid step contract", "reject invalid step contract", []string{"rejected"}, []TaskStepInput{tt.step}, nil)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Create() error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestReadyFrontierGatesDependenciesAndAllowsParallelWork(t *testing.T) {
+	store, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := store.Create(
+		"DAG task",
+		"run dependency graph",
+		[]string{"graph completes"},
+		[]TaskStepInput{
+			{ID: "left", Title: "Left branch", CompletionConditions: []string{"Left branch is complete."}},
+			{ID: "right", Title: "Right branch", CompletionConditions: []string{"Right branch is complete."}},
+			{ID: "join", Title: "Join", DependsOn: []string{"left", "right"}, CompletionConditions: []string{"Branches are joined."}},
+			{ID: "verify", Title: "Verify", DependsOn: []string{"join"}, CompletionConditions: []string{"Verification passes."}},
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ready := ReadyStepIDs(task)
+	if len(ready) != 2 || ready[0] != "left" || ready[1] != "right" {
+		t.Fatalf("initial ready frontier = %v", ready)
+	}
+	if _, err := store.Checkpoint(task.ID, "join", StepInProgress, "too early"); err == nil || !strings.Contains(err.Error(), "incomplete dependencies") {
+		t.Fatalf("dependent step started before frontier cleared: %v", err)
+	}
+	if _, err := store.Checkpoint(task.ID, "left", StepInProgress, "left running"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Checkpoint(task.ID, "right", StepInProgress, "right running"); err != nil {
+		t.Fatalf("parallel ready step rejected: %v", err)
+	}
+	if _, err := store.Checkpoint(task.ID, "left", StepCompleted, "left done"); err != nil {
+		t.Fatal(err)
+	}
+	task, err = store.Checkpoint(task.ID, "right", StepCompleted, "right done")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ready = ReadyStepIDs(task)
+	if len(ready) != 1 || ready[0] != "join" {
+		t.Fatalf("join frontier = %v", ready)
+	}
+	if _, err := store.Checkpoint(task.ID, "verify", StepCompleted, "too early"); err == nil || !strings.Contains(err.Error(), "incomplete dependencies") {
+		t.Fatalf("verify completed before join: %v", err)
+	}
+}
+
+func TestBatchCheckpointAcceptsDependencyClosureAtomically(t *testing.T) {
+	store, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := store.Create(
+		"Batch DAG",
+		"advance a dependency closure",
+		[]string{"closure recorded"},
+		[]TaskStepInput{
+			{ID: "a", Title: "A", CompletionConditions: []string{"A is complete."}},
+			{ID: "b", Title: "B", DependsOn: []string{"a"}, CompletionConditions: []string{"B is complete."}},
+			{ID: "c", Title: "C", DependsOn: []string{"b"}, CompletionConditions: []string{"C is complete."}},
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.BatchCheckpoint(task.ID, []string{"b"}, "", "invalid closure"); err == nil || !strings.Contains(err.Error(), "incomplete dependencies") {
+		t.Fatalf("accepted incomplete dependency closure: %v", err)
+	}
+	progressed, err := store.BatchCheckpoint(task.ID, []string{"a", "b"}, "c", "closure completed; c started")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if progressed.Steps[0].Status != StepCompleted || progressed.Steps[1].Status != StepCompleted || progressed.Steps[2].Status != StepInProgress {
+		t.Fatalf("unexpected dependency closure state: %#v", progressed.Steps)
+	}
+}
+
+func TestLegacyTaskStateLoadsAsCurrentSchema(t *testing.T) {
+	for _, version := range []int{legacySchemaVersion, dependencySchemaVersion, contextSchemaVersion} {
+		t.Run(fmt.Sprintf("v%d", version), func(t *testing.T) {
+			store, err := New(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			task, err := store.Create("Legacy", "load old state", []string{"loaded"}, []TaskStepInput{{ID: "work", Title: "Work"}}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			task.SchemaVersion = version
+			data, err := json.Marshal(task)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(store.Root(), task.ID+".json"), data, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			loaded, err := store.Get(task.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if loaded.SchemaVersion != SchemaVersion || len(loaded.Steps) != 1 || len(loaded.Steps[0].DependsOn) != 0 || len(loaded.Steps[0].CompletionConditions) != 0 || len(loaded.Steps[0].ContextRefs) != 0 || loaded.Steps[0].Quality != nil {
+				t.Fatalf("legacy task migration = %#v", loaded)
+			}
+		})
 	}
 }
 

@@ -49,7 +49,7 @@ func (s *Service) WorkflowManage(ctx context.Context, request WorkflowRequest) (
 		}
 		return Result{
 			"action": input.Action, "templates": templates, "count": len(templates), "composition_required": true,
-			"next_required_action": "Combine these templates for the current user goal: prune irrelevant steps, deduplicate, order the remaining steps, and merge completion conditions. Then call task_manage create with source_template_ids, composed steps, and completion_conditions.",
+			"next_required_action": "Combine these templates for the current user goal: prune irrelevant steps, deduplicate them, preserve or rebuild valid depends_on edges, preserve quality metadata or compose a complete Step Quality Contract when used, and merge completion conditions. Then call task_manage create with source_template_ids, composed steps, and completion_conditions.",
 		}, nil
 	case "list":
 		path := "/v1/workflow-templates"
@@ -192,7 +192,7 @@ func normalizeTemplateIDs(ids []string) []string {
 func taskStepInputsFromTemplate(template taskstate.Template) []taskstate.TaskStepInput {
 	steps := make([]taskstate.TaskStepInput, 0, len(template.Steps))
 	for _, step := range template.Steps {
-		steps = append(steps, taskstate.TaskStepInput{ID: step.ID, Title: step.Title, Phase: step.Phase})
+		steps = append(steps, taskstate.TaskStepInput{ID: step.ID, Title: step.Title, Phase: step.Phase, DependsOn: step.DependsOn, CompletionConditions: step.CompletionConditions, ContextRefs: step.ContextRefs, Quality: step.Quality})
 	}
 	return steps
 }

@@ -22,10 +22,10 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 		"status":                map[string]any{"type": "string", "description": "Action-specific status: task list filter, single-step checkpoint status, or final review status.", "enum": []string{"active", "blocked", "completed", "pending", "in_progress", "pass", "failed"}},
 		"limit":                 boundedIntProp("Maximum tasks returned by list. Defaults to 50 and is capped at 200.", 1, 200),
 		"summary":               stringProp("Current progress, blocker, resume, or final review summary."),
-		"intent_spec":           map[string]any{"type": "object", "additionalProperties": false, "required": []string{"status"}, "properties": map[string]any{"status": map[string]any{"type": "string", "enum": []string{"pass", "failed"}}, "evidence": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "findings": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}}},
-		"engineering_policy":    map[string]any{"type": "object", "additionalProperties": false, "required": []string{"status"}, "properties": map[string]any{"status": map[string]any{"type": "string", "enum": []string{"pass", "failed"}}, "evidence": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "findings": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}}},
 		"verified":              map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Facts verified during final_review. Required when status=pass."},
 		"risks":                 map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Remaining risks. Required when final_review status=failed."},
+		"intent_spec":           outcomeAxisSchema("Intent/spec compliance outcome. Required for final_review."),
+		"engineering_policy":    outcomeAxisSchema("Engineering/policy compliance outcome. Required for final_review."),
 	}
 
 	if cfg.NexusEndpoint == "" {
@@ -33,7 +33,7 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 		props["device"] = stringProp("Optional device identifier stored with the task.")
 		props["steps"] = map[string]any{
 			"type": "array", "maxItems": 12, "description": "Concrete task steps.",
-			"items": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"id", "title"}, "properties": map[string]any{"id": stringProp("Stable step id."), "title": stringProp("Human-readable step title.")}},
+			"items": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"id", "title"}, "properties": map[string]any{"id": stringProp("Stable step id."), "title": stringProp("Human-readable step title."), "depends_on": map[string]any{"type": "array", "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Step ids that must be completed before this step can start or complete."}, "completion_conditions": map[string]any{"type": "array", "maxItems": 4, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Checkable conditions that define when this step is complete. Required on every step when any dependency edge is used."}, "context_refs": map[string]any{"type": "array", "maxItems": 8, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Compact references to authoritative context such as recall://, skill://, artifact://, issue, commit, or task output pointers; do not duplicate source content."}, "quality": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"kind", "outcome"}, "properties": map[string]any{"kind": map[string]any{"type": "string", "enum": []string{"discovery", "vertical_slice", "wide_refactor_expand", "wide_refactor_migrate", "wide_refactor_contract", "verification", "release"}}, "outcome": stringProp("Independently observable outcome delivered by this step."), "refactor_group": stringProp("Stable group id for expand-migrate-contract wide refactors."), "dependency_reasons": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}, "description": "One concise reason for every depends_on edge; keys must exactly match depends_on."}}}}},
 		}
 		return taskManageInputObject(props)
 	}
@@ -42,7 +42,7 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 	props["device"] = stringProp("Optional device identifier used to hard-scope device-specific Evolution guidance and evidence candidates.")
 	props["steps"] = map[string]any{
 		"type": "array", "maxItems": 12, "description": "Concrete task steps. Required when composing multiple source templates.",
-		"items": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"id", "title"}, "properties": map[string]any{"id": stringProp("Stable step id."), "title": stringProp("Human-readable step title.")}},
+		"items": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"id", "title"}, "properties": map[string]any{"id": stringProp("Stable step id."), "title": stringProp("Human-readable step title."), "depends_on": map[string]any{"type": "array", "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Step ids that must be completed before this step can start or complete."}, "completion_conditions": map[string]any{"type": "array", "maxItems": 4, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Checkable conditions that define when this step is complete. Required on every step when any dependency edge is used."}, "context_refs": map[string]any{"type": "array", "maxItems": 8, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Compact references to authoritative context such as recall://, skill://, artifact://, issue, commit, or task output pointers; do not duplicate source content."}, "quality": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"kind", "outcome"}, "properties": map[string]any{"kind": map[string]any{"type": "string", "enum": []string{"discovery", "vertical_slice", "wide_refactor_expand", "wide_refactor_migrate", "wide_refactor_contract", "verification", "release"}}, "outcome": stringProp("Independently observable outcome delivered by this step."), "refactor_group": stringProp("Stable group id for expand-migrate-contract wide refactors."), "dependency_reasons": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}, "description": "One concise reason for every depends_on edge; keys must exactly match depends_on."}}}}},
 	}
 	props["template_id"] = stringProp("Single active workflow template to apply. Its current active version is resolved automatically.")
 	props["source_template_ids"] = map[string]any{"type": "array", "minItems": 2, "maxItems": 3, "items": map[string]any{"type": "string"}, "description": "Two or three templates already composed by the model into steps and completion_conditions."}
@@ -58,6 +58,17 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 		},
 	}
 	return taskManageInputObject(props)
+}
+
+func outcomeAxisSchema(description string) map[string]any {
+	return map[string]any{
+		"type": "object", "description": description, "additionalProperties": false, "required": []string{"status"},
+		"properties": map[string]any{
+			"status":   map[string]any{"type": "string", "enum": []string{"pass", "failed"}},
+			"evidence": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"findings": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+		},
+	}
 }
 
 func taskManageInputObject(props map[string]any) map[string]any {

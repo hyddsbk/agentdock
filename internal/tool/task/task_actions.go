@@ -14,8 +14,6 @@ var taskActions = []string{"create", "list", "get", "checkpoint", "block", "resu
 var workflowTemplateActions = []string{"publish", "retire", "list", "get", "get_many", "match", "vector_index"}
 
 type taskManageInput struct {
-	IntentSpec           *taskstate.OutcomeAxis
-	EngineeringPolicy    *taskstate.OutcomeAxis
 	Action               string
 	Title                string
 	Goal                 string
@@ -36,6 +34,8 @@ type taskManageInput struct {
 	Summary              string
 	Verified             []string
 	Risks                []string
+	IntentSpec           *taskstate.OutcomeAxis
+	EngineeringPolicy    *taskstate.OutcomeAxis
 }
 
 type workflowTemplateInput struct {
@@ -66,7 +66,7 @@ type workflowTemplateMatchRequest struct {
 func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) {
 	steps := make([]taskstate.TaskStepInput, len(request.Steps))
 	for i, step := range request.Steps {
-		steps[i] = taskstate.TaskStepInput{ID: step.ID, Title: step.Title}
+		steps[i] = taskstate.TaskStepInput{ID: step.ID, Title: step.Title, DependsOn: step.DependsOn, CompletionConditions: step.CompletionConditions, ContextRefs: step.ContextRefs, Quality: step.Quality}
 	}
 	learningChecks := make([]taskstate.EvolutionBinding, len(request.LearningChecks))
 	for i, check := range request.LearningChecks {
@@ -78,8 +78,6 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 	}
 
 	input := taskManageInput{
-		IntentSpec:           request.IntentSpec,
-		EngineeringPolicy:    request.EngineeringPolicy,
 		Action:               strings.ToLower(strings.TrimSpace(request.Action)),
 		Title:                request.Title,
 		Goal:                 request.Goal,
@@ -98,6 +96,8 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 		Summary:              request.Summary,
 		Verified:             append([]string(nil), request.Verified...),
 		Risks:                append([]string(nil), request.Risks...),
+		IntentSpec:           request.IntentSpec,
+		EngineeringPolicy:    request.EngineeringPolicy,
 	}
 	if request.CompletedStepIDs != nil {
 		input.CompletedStepIDsSet = true
@@ -209,7 +209,7 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 		task, evolutionWarning = s.refreshGuidanceBestEffort(ctx, task)
 		result := Result{
 			"action": input.Action, "task_id": task.ID, "task_summary": compactTaskSummary(task), "state_dir": s.tasks.Root(),
-			"next_required_action": "Use checkpoint at meaningful recovery points; completed_step_ids/current_step_id can update several steps atomically. Use block only for a real blocker. After all steps and real verification are complete, call final_review, then complete.",
+			"next_required_action": "Work ready_frontier steps first; independent ready steps may progress concurrently. Use checkpoint at meaningful recovery points. Use block only for a real blocker. After all steps and real verification are complete, call final_review, then complete.",
 		}
 		if len(task.GuidanceContext) > 0 {
 			result["guidance_context"] = task.GuidanceContext

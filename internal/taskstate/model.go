@@ -6,11 +6,12 @@ import (
 )
 
 const (
-	SchemaVersion           = 5
+	SchemaVersion           = 6
 	legacySchemaVersion     = 1
 	dependencySchemaVersion = 2
 	contextSchemaVersion    = 3
 	qualitySchemaVersion    = 4
+	diagnosticSchemaVersion = 5
 	FinalReviewPass         = "pass"
 	FinalReviewFailed       = "failed"
 
@@ -58,6 +59,14 @@ type OutcomeAxis struct {
 	Findings []string `json:"findings,omitempty"`
 }
 
+type Handoff struct {
+	NextStepID  string    `json:"next_step_id,omitempty"`
+	ContextRefs []string  `json:"context_refs,omitempty"`
+	Risks       []string  `json:"risks,omitempty"`
+	Revision    string    `json:"revision"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
 type FinalReviewInput struct {
 	Status            string       `json:"status"`
 	Summary           string       `json:"summary"`
@@ -102,6 +111,7 @@ type Task struct {
 	Events                []Event                `json:"events"`
 	Blocker               string                 `json:"blocker,omitempty"`
 	Summary               string                 `json:"summary,omitempty"`
+	Handoff               *Handoff               `json:"handoff,omitempty"`
 	GuidanceContext       []EvolutionContextItem `json:"guidance_context,omitempty"`
 	EvolutionGuidanceSeen []string               `json:"evolution_guidance_seen,omitempty"`
 	EvolutionCandidates   []EvolutionContextItem `json:"evolution_candidates,omitempty"`

@@ -36,7 +36,9 @@ type ManageRequest struct {
 	StepID               string                        `json:"step_id,omitempty"`
 	CompletedStepIDs     *[]string                     `json:"completed_step_ids,omitempty"`
 	CurrentStepID        string                        `json:"current_step_id,omitempty"`
+	NextStepID           string                        `json:"next_step_id,omitempty"`
 	Summary              string                        `json:"summary,omitempty"`
+	ContextRefs          []string                      `json:"context_refs,omitempty"`
 	Diagnostic           *taskstate.DiagnosticEvidence `json:"diagnostic,omitempty"`
 	Verified             []string                      `json:"verified,omitempty"`
 	Risks                []string                      `json:"risks,omitempty"`

@@ -9,7 +9,7 @@ import (
 	"github.com/uvwt/agentdock/internal/taskstate"
 )
 
-var taskActions = []string{"create", "list", "get", "checkpoint", "block", "resume", "final_review", "complete"}
+var taskActions = []string{"create", "list", "get", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}
 
 var workflowTemplateActions = []string{"publish", "retire", "list", "get", "get_many", "match", "vector_index"}
 
@@ -31,7 +31,9 @@ type taskManageInput struct {
 	CompletedStepIDs     []string
 	CompletedStepIDsSet  bool
 	CurrentStepID        string
+	NextStepID           string
 	Summary              string
+	ContextRefs          []string
 	Diagnostic           *taskstate.DiagnosticEvidence
 	Verified             []string
 	Risks                []string
@@ -94,7 +96,9 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 		TaskID:               request.TaskID,
 		StepID:               request.StepID,
 		CurrentStepID:        request.CurrentStepID,
+		NextStepID:           request.NextStepID,
 		Summary:              request.Summary,
+		ContextRefs:          append([]string(nil), request.ContextRefs...),
 		Diagnostic:           request.Diagnostic,
 		Verified:             append([]string(nil), request.Verified...),
 		Risks:                append([]string(nil), request.Risks...),
@@ -107,6 +111,9 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 	}
 	if input.Diagnostic != nil && input.Action != "checkpoint" {
 		return input, toolErrorDetails("VALIDATION_ERROR", "diagnostic evidence is only valid for checkpoint", "validation", map[string]any{"field": "diagnostic", "action": input.Action})
+	}
+	if (strings.TrimSpace(input.NextStepID) != "" || len(input.ContextRefs) > 0) && input.Action != "handoff" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "next_step_id and top-level context_refs are only valid for handoff", "validation", map[string]any{"action": input.Action})
 	}
 	if len(input.LearningChecks) > 3 {
 		return input, toolErrorDetails("VALIDATION_ERROR", "learning_checks cannot exceed 3", "validation", map[string]any{"field": "learning_checks"})
@@ -242,7 +249,11 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 		if err != nil {
 			return nil, taskToolError(err)
 		}
-		return Result{"action": input.Action, "task": task, "state_dir": s.tasks.Root()}, nil
+		result := Result{"action": input.Action, "task": task, "state_dir": s.tasks.Root()}
+		if resume := compactResumeContext(task); resume != nil {
+			result["resume_context"] = resume
+		}
+		return result, nil
 	case "checkpoint":
 		singleStepMode := strings.TrimSpace(input.StepID) != "" || input.Status != ""
 		batchMode := input.CompletedStepIDsSet || strings.TrimSpace(input.CurrentStepID) != ""
@@ -267,6 +278,8 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 		if err == nil {
 			task, evolutionWarning = s.refreshGuidanceBestEffort(ctx, task)
 		}
+	case "handoff":
+		task, err = s.tasks.Handoff(input.TaskID, input.NextStepID, input.Summary, input.ContextRefs, input.Risks)
 	case "final_review":
 		review := taskstate.FinalReviewInput{Status: input.Status, Summary: input.Summary, VerifiedFacts: input.Verified, OpenRisks: input.Risks, IntentSpec: input.IntentSpec, EngineeringPolicy: input.EngineeringPolicy}
 		task, err = s.tasks.FinalReview(input.TaskID, review)
@@ -291,6 +304,10 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 		return nil, taskToolError(err)
 	}
 	result := Result{"action": input.Action, "task_id": task.ID, "task_summary": compactTaskSummary(task), "state_dir": s.tasks.Root()}
+	if input.Action == "handoff" {
+		result["resume_context"] = compactResumeContext(task)
+		result["next_required_action"] = "Start the next session from resume_context; load its context_refs first, then continue next_step without restating source material."
+	}
 	if input.Action == "resume" && len(task.GuidanceContext) > 0 {
 		result["guidance_context"] = task.GuidanceContext
 	}

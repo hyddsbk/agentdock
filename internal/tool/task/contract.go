@@ -11,20 +11,22 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 	stringProp := toolcontract.String
 	boundedIntProp := toolcontract.BoundedInteger
 	props := map[string]any{
-		"action":                map[string]any{"type": "string", "description": "Task lifecycle action. Use checkpoint to update live step progress.", "enum": []string{"create", "list", "get", "checkpoint", "block", "resume", "final_review", "complete"}},
-		"task_id":               stringProp("Persistent task id for get, checkpoint, block, resume, final_review, or complete."),
+		"action":                map[string]any{"type": "string", "description": "Task lifecycle action. Use checkpoint to update progress and handoff to persist a fresh-session resume packet.", "enum": []string{"create", "list", "get", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}},
+		"task_id":               stringProp("Persistent task id for get, checkpoint, block, resume, handoff, final_review, or complete."),
 		"title":                 stringProp("Short task title. Required for action=create."),
 		"goal":                  stringProp("Fixed task goal. Required for action=create."),
 		"completion_conditions": map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string"}, "description": "Conditions that must be true before final_review can pass. Required for action=create."},
 		"step_id":               stringProp("Task step id for a single-step checkpoint."),
 		"completed_step_ids":    map[string]any{"type": "array", "minItems": 1, "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Task step ids to mark completed in one atomic batch checkpoint."},
 		"current_step_id":       stringProp("Single task step id to mark in_progress in a batch checkpoint."),
+		"next_step_id":          stringProp("For handoff, the in-progress or dependency-ready step the next session should continue. Leave empty only for tasks with no steps."),
+		"context_refs":          map[string]any{"type": "array", "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "For handoff, compact pointers to authoritative context the next session should load; do not duplicate the source content."},
 		"status":                map[string]any{"type": "string", "description": "Action-specific status: task list filter, single-step checkpoint status, or final review status.", "enum": []string{"active", "blocked", "completed", "pending", "in_progress", "pass", "failed"}},
 		"limit":                 boundedIntProp("Maximum tasks returned by list. Defaults to 50 and is capped at 200.", 1, 200),
-		"summary":               stringProp("Current progress, blocker, resume, or final review summary."),
+		"summary":               stringProp("Current progress, blocker, resume, handoff orientation, or final review summary."),
 		"diagnostic":            diagnosticEvidenceSchema(),
 		"verified":              map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Facts verified during final_review. Required when status=pass."},
-		"risks":                 map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Remaining risks. Required when final_review status=failed."},
+		"risks":                 map[string]any{"type": "array", "maxItems": 16, "items": map[string]any{"type": "string"}, "description": "Unresolved risks for handoff, or remaining risks for a failed final_review."},
 		"intent_spec":           outcomeAxisSchema("Intent/spec compliance outcome. Required for final_review."),
 		"engineering_policy":    outcomeAxisSchema("Engineering/policy compliance outcome. Required for final_review."),
 	}
@@ -92,13 +94,22 @@ func outcomeAxisSchema(description string) map[string]any {
 
 func taskManageInputObject(props map[string]any) map[string]any {
 	schema := toolcontract.InputObject(props, "action")
-	schema["allOf"] = []any{map[string]any{
-		"if": map[string]any{
-			"properties": map[string]any{"action": map[string]any{"const": "create"}},
-			"required":   []string{"action"},
+	schema["allOf"] = []any{
+		map[string]any{
+			"if": map[string]any{
+				"properties": map[string]any{"action": map[string]any{"const": "create"}},
+				"required":   []string{"action"},
+			},
+			"then": map[string]any{"required": []string{"title", "goal", "completion_conditions"}},
 		},
-		"then": map[string]any{"required": []string{"title", "goal", "completion_conditions"}},
-	}}
+		map[string]any{
+			"if": map[string]any{
+				"properties": map[string]any{"action": map[string]any{"const": "handoff"}},
+				"required":   []string{"action"},
+			},
+			"then": map[string]any{"required": []string{"task_id", "summary"}},
+		},
+	}
 	return schema
 }
 
@@ -117,10 +128,11 @@ func ManageOutputSchema(cfg config.Config) map[string]any {
 		"tasks":                arrayProp("Compact task summaries ordered by most recent update."),
 		"count":                intProp("Returned item count."),
 		"state_dir":            stringProp("Local AgentDock task state directory."),
-		"next_required_action": stringProp("Concise guidance for checkpoint progress or final review."),
+		"next_required_action": stringProp("Concise guidance for checkpoint progress, handoff/resume, or final review."),
+		"resume_context":       objectProp("Derived fresh-session resume packet returned by handoff and get when a current handoff exists."),
 	}
 	if cfg.NexusEndpoint != "" {
-		props["next_required_action"] = stringProp("Concise guidance for checkpoint progress, template composition, or final review.")
+		props["next_required_action"] = stringProp("Concise guidance for checkpoint progress, handoff/resume, template composition, or final review.")
 		props["guidance_context"] = arrayProp("Mature evolution records automatically recalled before task execution.")
 		props["review_revision"] = stringProp("Immutable final_review revision used to bind evolution evidence.")
 		props["evolution_candidates"] = arrayProp("Read-only candidate experiences that the saved final_review may verify.")

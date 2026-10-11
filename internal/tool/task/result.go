@@ -102,6 +102,15 @@ func compactTaskSummary(task taskstate.Task) map[string]any {
 	if task.Blocker != "" {
 		summary["blocker"] = truncateString(task.Blocker, 240)
 	}
+	if task.Handoff != nil {
+		summary["handoff"] = map[string]any{
+			"next_step_id":      task.Handoff.NextStepID,
+			"context_ref_count": len(task.Handoff.ContextRefs),
+			"risk_count":        len(task.Handoff.Risks),
+			"revision":          task.Handoff.Revision,
+			"created_at":        task.Handoff.CreatedAt,
+		}
+	}
 	if task.FinalReview != nil {
 		review := map[string]any{
 			"status": task.FinalReview.Status, "summary": truncateString(task.FinalReview.Summary, 200),
@@ -121,6 +130,75 @@ func compactTaskSummary(task taskstate.Task) map[string]any {
 	return summary
 }
 
+func compactResumeContext(task taskstate.Task) map[string]any {
+	if task.Handoff == nil {
+		return nil
+	}
+
+	readyIDs := taskstate.ReadyStepIDs(task)
+	readySet := make(map[string]struct{}, len(readyIDs))
+	for _, id := range readyIDs {
+		readySet[id] = struct{}{}
+	}
+
+	var nextStep map[string]any
+	readyFrontier := make([]map[string]any, 0, len(readyIDs))
+	refs := append([]string(nil), task.Handoff.ContextRefs...)
+	seenRefs := make(map[string]struct{}, len(refs)+8)
+	for _, ref := range refs {
+		seenRefs[ref] = struct{}{}
+	}
+	for _, step := range task.Steps {
+		item := map[string]any{"id": step.ID, "title": truncateString(step.Title, 120), "status": step.Status}
+		if len(step.DependsOn) > 0 {
+			item["depends_on"] = append([]string(nil), step.DependsOn...)
+		}
+		if len(step.CompletionConditions) > 0 {
+			item["completion_conditions"] = append([]string(nil), step.CompletionConditions...)
+		}
+		if len(step.ContextRefs) > 0 {
+			item["context_refs"] = append([]string(nil), step.ContextRefs...)
+		}
+		if step.Quality != nil {
+			item["quality"] = step.Quality
+		}
+		if step.ID == task.Handoff.NextStepID {
+			nextStep = item
+			for _, ref := range step.ContextRefs {
+				if _, exists := seenRefs[ref]; exists {
+					continue
+				}
+				seenRefs[ref] = struct{}{}
+				refs = append(refs, ref)
+			}
+		}
+		if _, ready := readySet[step.ID]; ready {
+			readyFrontier = append(readyFrontier, item)
+		}
+	}
+
+	resume := map[string]any{
+		"task_id":          task.ID,
+		"title":            task.Title,
+		"goal":             truncateString(task.Goal, 480),
+		"status":           task.Status,
+		"phase":            task.Phase,
+		"summary":          truncateString(task.Summary, 480),
+		"ready_frontier":   readyFrontier,
+		"context_refs":     refs,
+		"risks":            append([]string(nil), task.Handoff.Risks...),
+		"handoff_revision": task.Handoff.Revision,
+		"created_at":       task.Handoff.CreatedAt,
+	}
+	if nextStep != nil {
+		resume["next_step"] = nextStep
+	}
+	if task.Blocker != "" {
+		resume["blocker"] = truncateString(task.Blocker, 480)
+	}
+	return resume
+}
+
 func compactTaskListItem(task taskstate.Task) map[string]any {
 	summary := compactTaskSummary(task)
 	item := map[string]any{
@@ -128,7 +206,7 @@ func compactTaskListItem(task taskstate.Task) map[string]any {
 		"completed_step_count": summary["completed_step_count"], "step_count": summary["step_count"],
 		"ready_step_count": summary["ready_step_count"], "review_status": summary["review_status"], "updated_at": summary["updated_at"],
 	}
-	for _, key := range []string{"current_step", "summary", "blocker"} {
+	for _, key := range []string{"current_step", "summary", "blocker", "handoff"} {
 		if value, ok := summary[key]; ok {
 			item[key] = value
 		}

@@ -222,8 +222,8 @@ func assertObjectSchema(t *testing.T, name, kind string, schema map[string]any) 
 
 func TestTaskManageSchemaExposesLifecycleActions(t *testing.T) {
 	props := schemaProperties(t, "task_manage")
-	assertSameStrings(t, enumStrings(t, props["action"]), []string{"create", "list", "get", "checkpoint", "block", "resume", "final_review", "complete"})
-	for _, name := range []string{"completion_conditions", "steps", "step_id", "completed_step_ids", "current_step_id", "status", "summary", "verified", "risks"} {
+	assertSameStrings(t, enumStrings(t, props["action"]), []string{"create", "list", "get", "checkpoint", "block", "resume", "handoff", "final_review", "complete"})
+	for _, name := range []string{"completion_conditions", "steps", "step_id", "completed_step_ids", "current_step_id", "next_step_id", "context_refs", "status", "summary", "verified", "risks"} {
 		if _, ok := props[name]; !ok {
 			t.Fatalf("task_manage input schema missing %q", name)
 		}
@@ -250,7 +250,7 @@ func TestTaskManageSchemaExposesLifecycleActions(t *testing.T) {
 	if !ok {
 		t.Fatal("task_manage output schema properties missing")
 	}
-	for _, name := range []string{"task_id", "task", "task_summary", "next_required_action", "tasks", "count", "state_dir"} {
+	for _, name := range []string{"task_id", "task", "task_summary", "resume_context", "next_required_action", "tasks", "count", "state_dir"} {
 		if _, ok := outputProps[name]; !ok {
 			t.Fatalf("task_manage output schema missing %q", name)
 		}

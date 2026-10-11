@@ -76,6 +76,7 @@ func (s *Store) Checkpoint(id, stepID, status, summary string, diagnostics ...*D
 				return err
 			}
 		}
+		clearHandoff(task)
 		step.Status = status
 		step.UpdatedAt = now
 		if task.FinalReview != nil && task.FinalReview.Status == FinalReviewFailed {
@@ -165,6 +166,7 @@ func (s *Store) BatchCheckpoint(id string, completedStepIDs []string, currentSte
 			currentStepIndex = stepIndex
 		}
 
+		clearHandoff(task)
 		for _, stepID := range completedStepIDs {
 			step := &task.Steps[stepIndexes[stepID]]
 			step.Status = StepCompleted
@@ -206,6 +208,7 @@ func (s *Store) Block(id, summary string) (Task, error) {
 		if err := validateTextLimit("block summary", summary, maxTaskSummaryBytes); err != nil {
 			return err
 		}
+		clearHandoff(task)
 		task.Status = StatusBlocked
 		task.Blocker = summary
 		task.Summary = summary
@@ -226,6 +229,7 @@ func (s *Store) Resume(id, summary string) (Task, error) {
 		if err := validateTextLimit("resume summary", summary, maxTaskSummaryBytes); err != nil {
 			return err
 		}
+		clearHandoff(task)
 		task.Status = StatusActive
 		task.Blocker = ""
 		task.Summary = summary
@@ -314,6 +318,7 @@ func applyFinalReview(task *Task, input FinalReviewInput, now time.Time) error {
 	if err != nil {
 		return err
 	}
+	clearHandoff(task)
 	task.FinalReview = &FinalReview{Status: status, Summary: summary, VerifiedFacts: verifiedFacts, OpenRisks: openRisks, MissingChecks: missingChecks, IntentSpec: intentSpec, EngineeringPolicy: engineeringPolicy, ReviewRevision: reviewRevision, ReviewedAt: now}
 	task.EvolutionCandidates = nil
 	if status == FinalReviewPass {

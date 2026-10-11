@@ -7,7 +7,14 @@ import (
 	"time"
 )
 
-func (s *Store) Checkpoint(id, stepID, status, summary string) (Task, error) {
+func (s *Store) Checkpoint(id, stepID, status, summary string, diagnostics ...*DiagnosticEvidence) (Task, error) {
+	if len(diagnostics) > 1 {
+		return Task{}, errors.New("checkpoint accepts at most one diagnostic evidence object")
+	}
+	var diagnostic *DiagnosticEvidence
+	if len(diagnostics) == 1 {
+		diagnostic = diagnostics[0]
+	}
 	return s.mutate(id, func(task *Task, now time.Time) error {
 		if err := requireActive(task); err != nil {
 			return err
@@ -39,7 +46,21 @@ func (s *Store) Checkpoint(id, stepID, status, summary string) (Task, error) {
 			return fmt.Errorf("task step %s not found", stepID)
 		}
 		step := &task.Steps[stepIndex]
-		if step.Status == status && task.Summary == summary {
+		if diagnostic != nil {
+			if status == StepPending {
+				return errors.New("diagnostic evidence can only be recorded on an in_progress or completed checkpoint")
+			}
+			kind := ""
+			if step.Quality != nil {
+				kind = step.Quality.Kind
+			}
+			normalized, err := normalizeDiagnosticEvidence(step.ID, kind, diagnostic)
+			if err != nil {
+				return err
+			}
+			step.Diagnostic = normalized
+		}
+		if step.Status == status && task.Summary == summary && diagnostic == nil {
 			return nil
 		}
 		if !validStepTransition(step.Status, status) {
@@ -48,6 +69,11 @@ func (s *Store) Checkpoint(id, stepID, status, summary string) (Task, error) {
 		if status == StepInProgress || status == StepCompleted {
 			if blocked := unsatisfiedStepDependencies(task.Steps, *step, nil); len(blocked) > 0 {
 				return fmt.Errorf("step %s is blocked by incomplete dependencies: %s", step.ID, strings.Join(blocked, ", "))
+			}
+		}
+		if status == StepCompleted {
+			if err := validateDiagnosticStepCompletion(task, step); err != nil {
+				return err
 			}
 		}
 		step.Status = status
@@ -102,9 +128,18 @@ func (s *Store) BatchCheckpoint(id string, completedStepIDs []string, currentSte
 			completedSet[stepID] = struct{}{}
 		}
 		for _, stepID := range completedStepIDs {
-			step := task.Steps[stepIndexes[stepID]]
-			if blocked := unsatisfiedStepDependencies(task.Steps, step, completedSet); len(blocked) > 0 {
+			step := &task.Steps[stepIndexes[stepID]]
+			dependencyCompleting := completedSet
+			if step.Quality != nil && isDiagnosticStepKind(step.Quality.Kind) {
+				// Diagnostic stages are deliberately sequential: a later stage cannot be
+				// completed in the same atomic batch that claims its prerequisite.
+				dependencyCompleting = nil
+			}
+			if blocked := unsatisfiedStepDependencies(task.Steps, *step, dependencyCompleting); len(blocked) > 0 {
 				return fmt.Errorf("step %s is blocked by incomplete dependencies: %s", step.ID, strings.Join(blocked, ", "))
+			}
+			if err := validateDiagnosticStepCompletion(task, step); err != nil {
+				return err
 			}
 		}
 
@@ -120,7 +155,11 @@ func (s *Store) BatchCheckpoint(id string, completedStepIDs []string, currentSte
 			if !validStepTransition(task.Steps[stepIndex].Status, StepInProgress) {
 				return fmt.Errorf("cannot move step %s from %s to %s", currentStepID, task.Steps[stepIndex].Status, StepInProgress)
 			}
-			if blocked := unsatisfiedStepDependencies(task.Steps, task.Steps[stepIndex], completedSet); len(blocked) > 0 {
+			dependencyCompleting := completedSet
+			if task.Steps[stepIndex].Quality != nil && isDiagnosticStepKind(task.Steps[stepIndex].Quality.Kind) {
+				dependencyCompleting = nil
+			}
+			if blocked := unsatisfiedStepDependencies(task.Steps, task.Steps[stepIndex], dependencyCompleting); len(blocked) > 0 {
 				return fmt.Errorf("step %s is blocked by incomplete dependencies: %s", currentStepID, strings.Join(blocked, ", "))
 			}
 			currentStepIndex = stepIndex

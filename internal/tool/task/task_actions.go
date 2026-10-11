@@ -32,6 +32,7 @@ type taskManageInput struct {
 	CompletedStepIDsSet  bool
 	CurrentStepID        string
 	Summary              string
+	Diagnostic           *taskstate.DiagnosticEvidence
 	Verified             []string
 	Risks                []string
 	IntentSpec           *taskstate.OutcomeAxis
@@ -94,6 +95,7 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 		StepID:               request.StepID,
 		CurrentStepID:        request.CurrentStepID,
 		Summary:              request.Summary,
+		Diagnostic:           request.Diagnostic,
 		Verified:             append([]string(nil), request.Verified...),
 		Risks:                append([]string(nil), request.Risks...),
 		IntentSpec:           request.IntentSpec,
@@ -102,6 +104,9 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 	if request.CompletedStepIDs != nil {
 		input.CompletedStepIDsSet = true
 		input.CompletedStepIDs = append([]string(nil), (*request.CompletedStepIDs)...)
+	}
+	if input.Diagnostic != nil && input.Action != "checkpoint" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "diagnostic evidence is only valid for checkpoint", "validation", map[string]any{"field": "diagnostic", "action": input.Action})
 	}
 	if len(input.LearningChecks) > 3 {
 		return input, toolErrorDetails("VALIDATION_ERROR", "learning_checks cannot exceed 3", "validation", map[string]any{"field": "learning_checks"})
@@ -248,9 +253,12 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 			})
 		}
 		if batchMode {
+			if input.Diagnostic != nil {
+				return nil, toolErrorDetails("VALIDATION_ERROR", "diagnostic evidence is only accepted by single-step checkpoint", "validation", map[string]any{"field": "diagnostic"})
+			}
 			task, err = s.tasks.BatchCheckpoint(input.TaskID, input.CompletedStepIDs, input.CurrentStepID, input.Summary)
 		} else {
-			task, err = s.tasks.Checkpoint(input.TaskID, input.StepID, input.Status, input.Summary)
+			task, err = s.tasks.Checkpoint(input.TaskID, input.StepID, input.Status, input.Summary, input.Diagnostic)
 		}
 	case "block":
 		task, err = s.tasks.Block(input.TaskID, input.Summary)

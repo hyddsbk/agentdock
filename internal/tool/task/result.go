@@ -55,6 +55,9 @@ func compactTaskSummary(task taskstate.Task) map[string]any {
 		if step.Quality != nil {
 			item["quality"] = step.Quality
 		}
+		if step.Diagnostic != nil {
+			item["diagnostic"] = step.Diagnostic
+		}
 		steps = append(steps, item)
 		if currentStep == nil && step.Status == taskstate.StepInProgress {
 			currentStep = item

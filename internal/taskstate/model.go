@@ -6,10 +6,11 @@ import (
 )
 
 const (
-	SchemaVersion           = 4
+	SchemaVersion           = 5
 	legacySchemaVersion     = 1
 	dependencySchemaVersion = 2
 	contextSchemaVersion    = 3
+	qualitySchemaVersion    = 4
 	FinalReviewPass         = "pass"
 	FinalReviewFailed       = "failed"
 

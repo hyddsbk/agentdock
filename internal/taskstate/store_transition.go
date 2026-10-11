@@ -241,22 +241,41 @@ func applyFinalReview(task *Task, input FinalReviewInput, now time.Time) error {
 			}
 		}
 	}
+	intentSpec, err := normalizeOutcomeAxis("intent_spec", input.IntentSpec)
+	if err != nil {
+		return err
+	}
+	engineeringPolicy, err := normalizeOutcomeAxis("engineering_policy", input.EngineeringPolicy)
+	if err != nil {
+		return err
+	}
+	if intentSpec == nil || engineeringPolicy == nil {
+		return errors.New("final review requires both intent_spec and engineering_policy outcome axes")
+	}
 	if status == FinalReviewPass {
+		if intentSpec.Status != FinalReviewPass || engineeringPolicy.Status != FinalReviewPass {
+			return errors.New("passing final review requires both outcome axes to pass")
+		}
 		if len(verifiedFacts) == 0 {
 			return errors.New("passing final review requires at least one verified fact")
 		}
 		if pending := incompleteStepIDs(task.Steps); len(pending) > 0 {
 			return fmt.Errorf("passing final review requires all task steps completed: %s", strings.Join(pending, ", "))
 		}
-	} else if len(openRisks) == 0 && len(missingChecks) == 0 {
-		return errors.New("failed final review requires at least one risk")
+	} else {
+		if intentSpec.Status != FinalReviewFailed && engineeringPolicy.Status != FinalReviewFailed {
+			return errors.New("failed final review requires at least one failed outcome axis")
+		}
+		if len(openRisks) == 0 && len(missingChecks) == 0 {
+			return errors.New("failed final review requires at least one risk")
+		}
 	}
 
 	reviewRevision, err := newOpaqueID("rev_")
 	if err != nil {
 		return err
 	}
-	task.FinalReview = &FinalReview{Status: status, Summary: summary, VerifiedFacts: verifiedFacts, OpenRisks: openRisks, MissingChecks: missingChecks, ReviewRevision: reviewRevision, ReviewedAt: now}
+	task.FinalReview = &FinalReview{Status: status, Summary: summary, VerifiedFacts: verifiedFacts, OpenRisks: openRisks, MissingChecks: missingChecks, IntentSpec: intentSpec, EngineeringPolicy: engineeringPolicy, ReviewRevision: reviewRevision, ReviewedAt: now}
 	task.EvolutionCandidates = nil
 	if status == FinalReviewPass {
 		task.Phase = PhaseCloseout
@@ -264,6 +283,30 @@ func applyFinalReview(task *Task, input FinalReviewInput, now time.Time) error {
 	task.Summary = summary
 	appendTaskEvent(task, Event{Type: "final_review", Summary: status + ": " + summary, CreatedAt: now})
 	return nil
+}
+
+func normalizeOutcomeAxis(label string, input *OutcomeAxis) (*OutcomeAxis, error) {
+	if input == nil {
+		return nil, nil
+	}
+	status := strings.ToLower(strings.TrimSpace(input.Status))
+	if status != FinalReviewPass && status != FinalReviewFailed {
+		return nil, fmt.Errorf("%s status must be pass or failed", label)
+	}
+	evidence := normalizeReviewItems(input.Evidence)
+	findings := normalizeReviewItems(input.Findings)
+	for _, item := range append(append([]string{}, evidence...), findings...) {
+		if err := validateTextLimit("final review "+label+" item", item, maxTaskReviewItemBytes); err != nil {
+			return nil, err
+		}
+	}
+	if status == FinalReviewPass && len(evidence) == 0 {
+		return nil, fmt.Errorf("passing %s requires at least one evidence item", label)
+	}
+	if status == FinalReviewFailed && len(findings) == 0 {
+		return nil, fmt.Errorf("failed %s requires at least one finding", label)
+	}
+	return &OutcomeAxis{Status: status, Evidence: evidence, Findings: findings}, nil
 }
 
 func completeTask(task *Task, summary string, now time.Time, emitEvent bool) error {

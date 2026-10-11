@@ -38,3 +38,15 @@ func TestTaskManageSingleTemplatePreservesDependencyGraph(t *testing.T) {
 		t.Fatalf("initial ready frontier = %v", ready)
 	}
 }
+
+func TestTaskStepInputsFromTemplatePreservesQuality(t *testing.T) {
+	template := taskstate.Template{Steps: []taskstate.TemplateStep{{
+		ID: "slice", Title: "Slice", Phase: taskstate.PhaseExecute,
+		CompletionConditions: []string{"Slice passes."},
+		Quality:              &taskstate.StepQuality{Kind: taskstate.StepKindVerticalSlice, Outcome: "A complete behavior works."},
+	}}}
+	steps := taskStepInputsFromTemplate(template)
+	if len(steps) != 1 || steps[0].Quality == nil || steps[0].Quality.Kind != taskstate.StepKindVerticalSlice {
+		t.Fatalf("quality was not propagated: %#v", steps)
+	}
+}

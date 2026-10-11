@@ -15,13 +15,21 @@ type MatchRule struct {
 	Type     string   `json:"type,omitempty"`
 }
 
+type StepQuality struct {
+	Kind              string            `json:"kind"`
+	Outcome           string            `json:"outcome"`
+	RefactorGroup     string            `json:"refactor_group,omitempty"`
+	DependencyReasons map[string]string `json:"dependency_reasons,omitempty"`
+}
+
 type TemplateStep struct {
-	ID                   string   `json:"id"`
-	Title                string   `json:"title"`
-	Phase                Phase    `json:"phase"`
-	DependsOn            []string `json:"depends_on,omitempty"`
-	CompletionConditions []string `json:"completion_conditions,omitempty"`
-	ContextRefs          []string `json:"context_refs,omitempty"`
+	ID                   string       `json:"id"`
+	Title                string       `json:"title"`
+	Phase                Phase        `json:"phase"`
+	DependsOn            []string     `json:"depends_on,omitempty"`
+	CompletionConditions []string     `json:"completion_conditions,omitempty"`
+	ContextRefs          []string     `json:"context_refs,omitempty"`
+	Quality              *StepQuality `json:"quality,omitempty"`
 }
 
 type Template struct {
@@ -64,12 +72,13 @@ type TemplateReference struct {
 }
 
 type TaskStepInput struct {
-	ID                   string   `json:"id"`
-	Title                string   `json:"title"`
-	Phase                Phase    `json:"phase,omitempty"`
-	DependsOn            []string `json:"depends_on,omitempty"`
-	CompletionConditions []string `json:"completion_conditions,omitempty"`
-	ContextRefs          []string `json:"context_refs,omitempty"`
+	ID                   string       `json:"id"`
+	Title                string       `json:"title"`
+	Phase                Phase        `json:"phase,omitempty"`
+	DependsOn            []string     `json:"depends_on,omitempty"`
+	CompletionConditions []string     `json:"completion_conditions,omitempty"`
+	ContextRefs          []string     `json:"context_refs,omitempty"`
+	Quality              *StepQuality `json:"quality,omitempty"`
 }
 
 const (
@@ -79,12 +88,13 @@ const (
 )
 
 type TaskStep struct {
-	ID                   string    `json:"id"`
-	Title                string    `json:"title"`
-	Phase                Phase     `json:"phase"`
-	DependsOn            []string  `json:"depends_on,omitempty"`
-	CompletionConditions []string  `json:"completion_conditions,omitempty"`
-	ContextRefs          []string  `json:"context_refs,omitempty"`
-	Status               string    `json:"status"`
-	UpdatedAt            time.Time `json:"updated_at"`
+	ID                   string       `json:"id"`
+	Title                string       `json:"title"`
+	Phase                Phase        `json:"phase"`
+	DependsOn            []string     `json:"depends_on,omitempty"`
+	CompletionConditions []string     `json:"completion_conditions,omitempty"`
+	ContextRefs          []string     `json:"context_refs,omitempty"`
+	Quality              *StepQuality `json:"quality,omitempty"`
+	Status               string       `json:"status"`
+	UpdatedAt            time.Time    `json:"updated_at"`
 }

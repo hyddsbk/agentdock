@@ -13,6 +13,14 @@ import (
 	"time"
 )
 
+func passingOutcomeAxes() (*OutcomeAxis, *OutcomeAxis) {
+	return &OutcomeAxis{Status: FinalReviewPass, Evidence: []string{"intent verified"}}, &OutcomeAxis{Status: FinalReviewPass, Evidence: []string{"policy verified"}}
+}
+
+func failedOutcomeAxes() (*OutcomeAxis, *OutcomeAxis) {
+	return &OutcomeAxis{Status: FinalReviewFailed, Findings: []string{"intent gap"}}, &OutcomeAxis{Status: FinalReviewPass, Evidence: []string{"policy verified"}}
+}
+
 func TestTaskLifecyclePersistsLiveProgress(t *testing.T) {
 	root := t.TempDir()
 	store, err := New(root)
@@ -60,9 +68,11 @@ func TestTaskLifecyclePersistsLiveProgress(t *testing.T) {
 		t.Fatal(err)
 	}
 	task, err = store.FinalReview(task.ID, FinalReviewInput{
-		Status:        FinalReviewPass,
-		Summary:       "all checks passed",
-		VerifiedFacts: []string{"health endpoint returned 200"},
+		Status:            FinalReviewPass,
+		Summary:           "all checks passed",
+		VerifiedFacts:     []string{"health endpoint returned 200"},
+		IntentSpec:        func() *OutcomeAxis { a, _ := passingOutcomeAxes(); return a }(),
+		EngineeringPolicy: func() *OutcomeAxis { _, a := passingOutcomeAxes(); return a }(),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -103,17 +113,20 @@ func TestFinalReviewRequiresCompletedStepsAndVerifiedFacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewPass, Summary: "checked", VerifiedFacts: []string{"unit test passed"}})
+	intent, policy := passingOutcomeAxes()
+	_, err = store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewPass, Summary: "checked", VerifiedFacts: []string{"unit test passed"}, IntentSpec: intent, EngineeringPolicy: policy})
 	if err == nil || !strings.Contains(err.Error(), "all task steps completed") {
 		t.Fatalf("expected incomplete-step error, got %v", err)
 	}
-	if _, err := store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewFailed, Summary: "not ready"}); err == nil {
+	failedIntent, passedPolicy := failedOutcomeAxes()
+	if _, err := store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewFailed, Summary: "not ready", IntentSpec: failedIntent, EngineeringPolicy: passedPolicy}); err == nil {
 		t.Fatal("failed final review accepted no risks")
 	}
 	if _, err := store.Checkpoint(task.ID, "repair", StepCompleted, "repair complete"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewPass, Summary: "checked"}); err == nil {
+	intent, policy = passingOutcomeAxes()
+	if _, err := store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewPass, Summary: "checked", IntentSpec: intent, EngineeringPolicy: policy}); err == nil {
 		t.Fatal("passing final review accepted no verified facts")
 	}
 }
@@ -186,7 +199,8 @@ func TestBatchCheckpointUpdatesStepsAtomicallyAndSupportsRetry(t *testing.T) {
 	if _, err := store.BatchCheckpoint(task.ID, []string{"inspect", "test"}, "docs", "retry same checkpoint"); err != nil {
 		t.Fatalf("idempotent batch retry failed: %v", err)
 	}
-	task, err = store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewFailed, Summary: "docs pending", OpenRisks: []string{"documentation incomplete"}})
+	failedIntent, passedPolicy := failedOutcomeAxes()
+	task, err = store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewFailed, Summary: "docs pending", OpenRisks: []string{"documentation incomplete"}, IntentSpec: failedIntent, EngineeringPolicy: passedPolicy})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +273,8 @@ func TestBlockAndResumeUsesOneSummary(t *testing.T) {
 	if task.Status != StatusActive || task.Blocker != "" || task.Summary != "network restored" {
 		t.Fatalf("unexpected resumed state: %#v", task)
 	}
-	task, err = store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewPass, Summary: "ready to close", VerifiedFacts: []string{"network restored"}})
+	intent, policy := passingOutcomeAxes()
+	task, err = store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewPass, Summary: "ready to close", VerifiedFacts: []string{"network restored"}, IntentSpec: intent, EngineeringPolicy: policy})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -461,7 +476,7 @@ func TestBatchCheckpointAcceptsDependencyClosureAtomically(t *testing.T) {
 }
 
 func TestLegacyTaskStateLoadsAsCurrentSchema(t *testing.T) {
-	for _, version := range []int{legacySchemaVersion, dependencySchemaVersion} {
+	for _, version := range []int{legacySchemaVersion, dependencySchemaVersion, contextSchemaVersion} {
 		t.Run(fmt.Sprintf("v%d", version), func(t *testing.T) {
 			store, err := New(t.TempDir())
 			if err != nil {
@@ -483,7 +498,7 @@ func TestLegacyTaskStateLoadsAsCurrentSchema(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if loaded.SchemaVersion != SchemaVersion || len(loaded.Steps) != 1 || len(loaded.Steps[0].DependsOn) != 0 || len(loaded.Steps[0].CompletionConditions) != 0 || len(loaded.Steps[0].ContextRefs) != 0 {
+			if loaded.SchemaVersion != SchemaVersion || len(loaded.Steps) != 1 || len(loaded.Steps[0].DependsOn) != 0 || len(loaded.Steps[0].CompletionConditions) != 0 || len(loaded.Steps[0].ContextRefs) != 0 || loaded.Steps[0].Quality != nil {
 				t.Fatalf("legacy task migration = %#v", loaded)
 			}
 		})

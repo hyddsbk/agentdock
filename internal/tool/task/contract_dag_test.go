@@ -20,5 +20,14 @@ func TestTaskManageStepSchemaExposesDependencies(t *testing.T) {
 		if dependencySchema["type"] != "array" || dependencySchema["uniqueItems"] != true {
 			t.Fatalf("depends_on schema = %#v", dependencySchema)
 		}
+		qualitySchema, ok := stepProperties["quality"].(map[string]any)
+		if !ok || qualitySchema["type"] != "object" {
+			t.Fatalf("task step schema missing quality: %#v", stepProperties)
+		}
+		for _, axis := range []string{"intent_spec", "engineering_policy"} {
+			if _, ok := properties[axis].(map[string]any); !ok {
+				t.Fatalf("task schema missing %s", axis)
+			}
+		}
 	}
 }

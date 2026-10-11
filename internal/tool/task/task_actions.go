@@ -34,6 +34,8 @@ type taskManageInput struct {
 	Summary              string
 	Verified             []string
 	Risks                []string
+	IntentSpec           *taskstate.OutcomeAxis
+	EngineeringPolicy    *taskstate.OutcomeAxis
 }
 
 type workflowTemplateInput struct {
@@ -64,7 +66,7 @@ type workflowTemplateMatchRequest struct {
 func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) {
 	steps := make([]taskstate.TaskStepInput, len(request.Steps))
 	for i, step := range request.Steps {
-		steps[i] = taskstate.TaskStepInput{ID: step.ID, Title: step.Title, DependsOn: step.DependsOn, CompletionConditions: step.CompletionConditions, ContextRefs: step.ContextRefs}
+		steps[i] = taskstate.TaskStepInput{ID: step.ID, Title: step.Title, DependsOn: step.DependsOn, CompletionConditions: step.CompletionConditions, ContextRefs: step.ContextRefs, Quality: step.Quality}
 	}
 	learningChecks := make([]taskstate.EvolutionBinding, len(request.LearningChecks))
 	for i, check := range request.LearningChecks {
@@ -94,6 +96,8 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 		Summary:              request.Summary,
 		Verified:             append([]string(nil), request.Verified...),
 		Risks:                append([]string(nil), request.Risks...),
+		IntentSpec:           request.IntentSpec,
+		EngineeringPolicy:    request.EngineeringPolicy,
 	}
 	if request.CompletedStepIDs != nil {
 		input.CompletedStepIDsSet = true
@@ -256,7 +260,7 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 			task, evolutionWarning = s.refreshGuidanceBestEffort(ctx, task)
 		}
 	case "final_review":
-		review := taskstate.FinalReviewInput{Status: input.Status, Summary: input.Summary, VerifiedFacts: input.Verified, OpenRisks: input.Risks}
+		review := taskstate.FinalReviewInput{Status: input.Status, Summary: input.Summary, VerifiedFacts: input.Verified, OpenRisks: input.Risks, IntentSpec: input.IntentSpec, EngineeringPolicy: input.EngineeringPolicy}
 		task, err = s.tasks.FinalReview(input.TaskID, review)
 		if err == nil {
 			warnings := make([]string, 0, 2)

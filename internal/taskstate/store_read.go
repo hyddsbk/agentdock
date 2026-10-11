@@ -144,7 +144,7 @@ func decodeTask(data []byte, label string) (Task, error) {
 		return Task{}, fmt.Errorf("decode task %s: %w", label, err)
 	}
 	switch task.SchemaVersion {
-	case legacySchemaVersion, dependencySchemaVersion:
+	case legacySchemaVersion, dependencySchemaVersion, contextSchemaVersion:
 		task.SchemaVersion = SchemaVersion
 	case SchemaVersion:
 	default:

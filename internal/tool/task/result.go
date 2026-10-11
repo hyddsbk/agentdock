@@ -52,6 +52,9 @@ func compactTaskSummary(task taskstate.Task) map[string]any {
 		if len(step.ContextRefs) > 0 {
 			item["context_refs"] = append([]string(nil), step.ContextRefs...)
 		}
+		if step.Quality != nil {
+			item["quality"] = step.Quality
+		}
 		steps = append(steps, item)
 		if currentStep == nil && step.Status == taskstate.StepInProgress {
 			currentStep = item
@@ -97,10 +100,17 @@ func compactTaskSummary(task taskstate.Task) map[string]any {
 		summary["blocker"] = truncateString(task.Blocker, 240)
 	}
 	if task.FinalReview != nil {
-		summary["final_review"] = map[string]any{
+		review := map[string]any{
 			"status": task.FinalReview.Status, "summary": truncateString(task.FinalReview.Summary, 200),
 			"verified_count": len(task.FinalReview.VerifiedFacts), "risk_count": len(task.FinalReview.OpenRisks), "reviewed_at": task.FinalReview.ReviewedAt,
 		}
+		if task.FinalReview.IntentSpec != nil {
+			review["intent_spec"] = task.FinalReview.IntentSpec
+		}
+		if task.FinalReview.EngineeringPolicy != nil {
+			review["engineering_policy"] = task.FinalReview.EngineeringPolicy
+		}
+		summary["final_review"] = review
 	}
 	if task.CompletedAt != nil {
 		summary["completed_at"] = *task.CompletedAt

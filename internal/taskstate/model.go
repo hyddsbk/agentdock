@@ -6,9 +6,10 @@ import (
 )
 
 const (
-	SchemaVersion           = 3
+	SchemaVersion           = 4
 	legacySchemaVersion     = 1
 	dependencySchemaVersion = 2
+	contextSchemaVersion    = 3
 	FinalReviewPass         = "pass"
 	FinalReviewFailed       = "failed"
 
@@ -50,22 +51,32 @@ type Condition struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type OutcomeAxis struct {
+	Status   string   `json:"status"`
+	Evidence []string `json:"evidence,omitempty"`
+	Findings []string `json:"findings,omitempty"`
+}
+
 type FinalReviewInput struct {
-	Status        string   `json:"status"`
-	Summary       string   `json:"summary"`
-	VerifiedFacts []string `json:"verified_facts,omitempty"`
-	OpenRisks     []string `json:"open_risks,omitempty"`
-	MissingChecks []string `json:"missing_checks,omitempty"`
+	Status            string       `json:"status"`
+	Summary           string       `json:"summary"`
+	VerifiedFacts     []string     `json:"verified_facts,omitempty"`
+	OpenRisks         []string     `json:"open_risks,omitempty"`
+	MissingChecks     []string     `json:"missing_checks,omitempty"`
+	IntentSpec        *OutcomeAxis `json:"intent_spec,omitempty"`
+	EngineeringPolicy *OutcomeAxis `json:"engineering_policy,omitempty"`
 }
 
 type FinalReview struct {
-	Status         string    `json:"status"`
-	Summary        string    `json:"summary"`
-	VerifiedFacts  []string  `json:"verified_facts,omitempty"`
-	OpenRisks      []string  `json:"open_risks,omitempty"`
-	MissingChecks  []string  `json:"missing_checks,omitempty"`
-	ReviewRevision string    `json:"review_revision"`
-	ReviewedAt     time.Time `json:"reviewed_at"`
+	Status            string       `json:"status"`
+	Summary           string       `json:"summary"`
+	VerifiedFacts     []string     `json:"verified_facts,omitempty"`
+	OpenRisks         []string     `json:"open_risks,omitempty"`
+	MissingChecks     []string     `json:"missing_checks,omitempty"`
+	IntentSpec        *OutcomeAxis `json:"intent_spec,omitempty"`
+	EngineeringPolicy *OutcomeAxis `json:"engineering_policy,omitempty"`
+	ReviewRevision    string       `json:"review_revision"`
+	ReviewedAt        time.Time    `json:"reviewed_at"`
 }
 
 type Event struct {

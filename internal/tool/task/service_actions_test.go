@@ -39,7 +39,7 @@ func TestTaskManageLifecycleAndRestartRecovery(t *testing.T) {
 	}
 	if _, err := rt.manageTest(context.Background(), map[string]any{
 		"action": "final_review", "task_id": taskID, "status": "pass", "summary": "final verification passed",
-		"verified": []string{"health endpoint returned 200"}, "risks": []string{},
+		"verified": []string{"health endpoint returned 200"}, "risks": []string{}, "intent_spec": map[string]any{"status": "pass", "evidence": []string{"intent verified"}}, "engineering_policy": map[string]any{"status": "pass", "evidence": []string{"policy verified"}},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +248,7 @@ func TestTaskManageFinalReviewDoesNotAutoCompleteSteps(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = rt.manageTest(context.Background(), map[string]any{
-		"action": "final_review", "task_id": created["task_id"], "status": "pass", "summary": "claimed done", "verified": []string{"claim"},
+		"action": "final_review", "task_id": created["task_id"], "status": "pass", "summary": "claimed done", "verified": []string{"claim"}, "intent_spec": map[string]any{"status": "pass", "evidence": []string{"intent verified"}}, "engineering_policy": map[string]any{"status": "pass", "evidence": []string{"policy verified"}},
 	})
 	if err == nil || !strings.Contains(err.Error(), "all task steps completed") {
 		t.Fatalf("final_review should reject incomplete steps: %v", err)
@@ -363,5 +363,21 @@ func TestWorkflowTemplateRetireRequiresExactVersion(t *testing.T) {
 	}
 	if toolErr.Message != "template_id and template_version are required" {
 		t.Fatalf("unexpected validation message: %q", toolErr.Message)
+	}
+}
+
+func TestTaskManageCreateExposesStepQuality(t *testing.T) {
+	rt, _ := newTaskTestService(t)
+	created, err := rt.manageTest(context.Background(), map[string]any{
+		"action": "create", "title": "Quality", "goal": "preserve step quality", "completion_conditions": []string{"done"},
+		"steps": []map[string]any{{"id": "slice", "title": "Ship slice", "completion_conditions": []string{"Behavior passes."}, "quality": map[string]any{"kind": "vertical_slice", "outcome": "One complete behavior works end-to-end."}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary := created["task_summary"].(map[string]any)
+	steps := summary["steps"].([]map[string]any)
+	if len(steps) != 1 || steps[0]["quality"] == nil {
+		t.Fatalf("quality missing from compact task summary: %#v", summary)
 	}
 }

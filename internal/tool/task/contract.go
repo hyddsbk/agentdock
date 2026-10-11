@@ -31,7 +31,7 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 		props["device"] = stringProp("Optional device identifier stored with the task.")
 		props["steps"] = map[string]any{
 			"type": "array", "maxItems": 12, "description": "Concrete task steps.",
-			"items": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"id", "title"}, "properties": map[string]any{"id": stringProp("Stable step id."), "title": stringProp("Human-readable step title.")}},
+			"items": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"id", "title"}, "properties": map[string]any{"id": stringProp("Stable step id."), "title": stringProp("Human-readable step title."), "depends_on": map[string]any{"type": "array", "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Step ids that must be completed before this step can start or complete."}}},
 		}
 		return taskManageInputObject(props)
 	}
@@ -40,7 +40,7 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 	props["device"] = stringProp("Optional device identifier used to hard-scope device-specific Evolution guidance and evidence candidates.")
 	props["steps"] = map[string]any{
 		"type": "array", "maxItems": 12, "description": "Concrete task steps. Required when composing multiple source templates.",
-		"items": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"id", "title"}, "properties": map[string]any{"id": stringProp("Stable step id."), "title": stringProp("Human-readable step title.")}},
+		"items": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"id", "title"}, "properties": map[string]any{"id": stringProp("Stable step id."), "title": stringProp("Human-readable step title."), "depends_on": map[string]any{"type": "array", "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Step ids that must be completed before this step can start or complete."}}},
 	}
 	props["template_id"] = stringProp("Single active workflow template to apply. Its current active version is resolved automatically.")
 	props["source_template_ids"] = map[string]any{"type": "array", "minItems": 2, "maxItems": 3, "items": map[string]any{"type": "string"}, "description": "Two or three templates already composed by the model into steps and completion_conditions."}

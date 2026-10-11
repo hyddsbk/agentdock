@@ -16,9 +16,10 @@ type MatchRule struct {
 }
 
 type TemplateStep struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	Phase Phase  `json:"phase"`
+	ID        string   `json:"id"`
+	Title     string   `json:"title"`
+	Phase     Phase    `json:"phase"`
+	DependsOn []string `json:"depends_on,omitempty"`
 }
 
 type Template struct {
@@ -61,9 +62,10 @@ type TemplateReference struct {
 }
 
 type TaskStepInput struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	Phase Phase  `json:"phase,omitempty"`
+	ID        string   `json:"id"`
+	Title     string   `json:"title"`
+	Phase     Phase    `json:"phase,omitempty"`
+	DependsOn []string `json:"depends_on,omitempty"`
 }
 
 const (
@@ -76,6 +78,7 @@ type TaskStep struct {
 	ID        string    `json:"id"`
 	Title     string    `json:"title"`
 	Phase     Phase     `json:"phase"`
+	DependsOn []string  `json:"depends_on,omitempty"`
 	Status    string    `json:"status"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

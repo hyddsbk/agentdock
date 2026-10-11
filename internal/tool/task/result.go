@@ -31,6 +31,11 @@ func normalizeJSONToolValue(value any) any {
 
 func compactTaskSummary(task taskstate.Task) map[string]any {
 	completedSteps := 0
+	readyIDs := taskstate.ReadyStepIDs(task)
+	readySet := make(map[string]struct{}, len(readyIDs))
+	for _, id := range readyIDs {
+		readySet[id] = struct{}{}
+	}
 	steps := make([]map[string]any, 0, len(task.Steps))
 	var currentStep map[string]any
 	for _, step := range task.Steps {
@@ -38,6 +43,9 @@ func compactTaskSummary(task taskstate.Task) map[string]any {
 			completedSteps++
 		}
 		item := map[string]any{"id": step.ID, "title": truncateString(step.Title, 120), "status": step.Status}
+		if len(step.DependsOn) > 0 {
+			item["depends_on"] = append([]string(nil), step.DependsOn...)
+		}
 		steps = append(steps, item)
 		if currentStep == nil && step.Status == taskstate.StepInProgress {
 			currentStep = item
@@ -45,10 +53,18 @@ func compactTaskSummary(task taskstate.Task) map[string]any {
 	}
 	if currentStep == nil {
 		for _, item := range steps {
-			if item["status"] == taskstate.StepPending {
+			id, _ := item["id"].(string)
+			if _, ready := readySet[id]; ready {
 				currentStep = item
 				break
 			}
+		}
+	}
+	readyFrontier := make([]map[string]any, 0, len(readyIDs))
+	for _, item := range steps {
+		id, _ := item["id"].(string)
+		if _, ready := readySet[id]; ready {
+			readyFrontier = append(readyFrontier, item)
 		}
 	}
 	conditionRefs := make([]map[string]any, 0, len(task.Conditions))
@@ -58,6 +74,7 @@ func compactTaskSummary(task taskstate.Task) map[string]any {
 	summary := map[string]any{
 		"id": task.ID, "title": task.Title, "status": task.Status, "phase": task.Phase,
 		"completed_step_count": completedSteps, "step_count": len(task.Steps), "steps": steps,
+		"ready_step_count": len(readyFrontier), "ready_frontier": readyFrontier,
 		"condition_count": len(task.Conditions), "condition_refs": conditionRefs, "review_status": reviewStatus(task),
 		"updated_at": task.UpdatedAt,
 	}
@@ -90,7 +107,7 @@ func compactTaskListItem(task taskstate.Task) map[string]any {
 	item := map[string]any{
 		"id": summary["id"], "title": summary["title"], "goal": task.Goal, "status": summary["status"], "phase": summary["phase"],
 		"completed_step_count": summary["completed_step_count"], "step_count": summary["step_count"],
-		"review_status": summary["review_status"], "updated_at": summary["updated_at"],
+		"ready_step_count": summary["ready_step_count"], "review_status": summary["review_status"], "updated_at": summary["updated_at"],
 	}
 	for _, key := range []string{"current_step", "summary", "blocker"} {
 		if value, ok := summary[key]; ok {

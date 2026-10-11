@@ -136,8 +136,8 @@ func TestCheckpointAllowsOnlyForwardProgress(t *testing.T) {
 	if _, err := store.Checkpoint(task.ID, "code", StepInProgress, "coding"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Checkpoint(task.ID, "test", StepInProgress, "testing"); err == nil {
-		t.Fatal("accepted a second in-progress step")
+	if _, err := store.Checkpoint(task.ID, "test", StepInProgress, "testing"); err != nil {
+		t.Fatalf("independent frontier step could not run concurrently: %v", err)
 	}
 	if _, err := store.Checkpoint(task.ID, "code", StepCompleted, "code complete"); err != nil {
 		t.Fatal(err)
@@ -224,15 +224,15 @@ func TestBatchCheckpointUpdatesStepsAtomicallyAndSupportsRetry(t *testing.T) {
 	if _, err := store.Checkpoint(atomicTask.ID, "code", StepInProgress, "coding"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.BatchCheckpoint(atomicTask.ID, nil, "docs", "switch current step"); err == nil || !strings.Contains(err.Error(), "already in progress") {
-		t.Fatalf("accepted a second in-progress step: %v", err)
+	if _, err := store.BatchCheckpoint(atomicTask.ID, nil, "docs", "start independent docs"); err != nil {
+		t.Fatalf("independent batch frontier step could not run concurrently: %v", err)
 	}
 	loaded, err = store.Get(atomicTask.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.Steps[0].Status != StepInProgress || loaded.Steps[1].Status != StepPending {
-		t.Fatalf("rejected current-step switch changed task: %#v", loaded.Steps)
+	if loaded.Steps[0].Status != StepInProgress || loaded.Steps[1].Status != StepInProgress {
+		t.Fatalf("parallel frontier progress was not preserved: %#v", loaded.Steps)
 	}
 }
 
@@ -313,6 +313,138 @@ func TestCreateRejectsInvalidSteps(t *testing.T) {
 	)
 	if err == nil || !strings.Contains(err.Error(), "duplicate task step") {
 		t.Fatalf("expected duplicate-step error, got %v", err)
+	}
+}
+
+func TestCreateRejectsInvalidDependencyGraphs(t *testing.T) {
+	tests := []struct {
+		name  string
+		steps []TaskStepInput
+		want  string
+	}{
+		{name: "unknown", steps: []TaskStepInput{{ID: "a", Title: "A", DependsOn: []string{"missing"}}}, want: "unknown step"},
+		{name: "self", steps: []TaskStepInput{{ID: "a", Title: "A", DependsOn: []string{"a"}}}, want: "cannot depend on itself"},
+		{name: "duplicate", steps: []TaskStepInput{{ID: "a", Title: "A"}, {ID: "b", Title: "B", DependsOn: []string{"a", "a"}}}, want: "duplicate dependency"},
+		{name: "whitespace", steps: []TaskStepInput{{ID: "a", Title: "A"}, {ID: "b", Title: "B", DependsOn: []string{" a"}}}, want: "invalid dependency"},
+		{name: "cycle", steps: []TaskStepInput{{ID: "a", Title: "A", DependsOn: []string{"b"}}, {ID: "b", Title: "B", DependsOn: []string{"a"}}}, want: "contains a cycle"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store, err := New(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = store.Create("Invalid graph", "reject invalid graph", []string{"rejected"}, tt.steps, nil)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Create() error = %v, want substring %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestReadyFrontierGatesDependenciesAndAllowsParallelWork(t *testing.T) {
+	store, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := store.Create(
+		"DAG task",
+		"run dependency graph",
+		[]string{"graph completes"},
+		[]TaskStepInput{
+			{ID: "left", Title: "Left branch"},
+			{ID: "right", Title: "Right branch"},
+			{ID: "join", Title: "Join", DependsOn: []string{"left", "right"}},
+			{ID: "verify", Title: "Verify", DependsOn: []string{"join"}},
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ready := ReadyStepIDs(task)
+	if len(ready) != 2 || ready[0] != "left" || ready[1] != "right" {
+		t.Fatalf("initial ready frontier = %v", ready)
+	}
+	if _, err := store.Checkpoint(task.ID, "join", StepInProgress, "too early"); err == nil || !strings.Contains(err.Error(), "incomplete dependencies") {
+		t.Fatalf("dependent step started before frontier cleared: %v", err)
+	}
+	if _, err := store.Checkpoint(task.ID, "left", StepInProgress, "left running"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Checkpoint(task.ID, "right", StepInProgress, "right running"); err != nil {
+		t.Fatalf("parallel ready step rejected: %v", err)
+	}
+	if _, err := store.Checkpoint(task.ID, "left", StepCompleted, "left done"); err != nil {
+		t.Fatal(err)
+	}
+	task, err = store.Checkpoint(task.ID, "right", StepCompleted, "right done")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ready = ReadyStepIDs(task)
+	if len(ready) != 1 || ready[0] != "join" {
+		t.Fatalf("join frontier = %v", ready)
+	}
+	if _, err := store.Checkpoint(task.ID, "verify", StepCompleted, "too early"); err == nil || !strings.Contains(err.Error(), "incomplete dependencies") {
+		t.Fatalf("verify completed before join: %v", err)
+	}
+}
+
+func TestBatchCheckpointAcceptsDependencyClosureAtomically(t *testing.T) {
+	store, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := store.Create(
+		"Batch DAG",
+		"advance a dependency closure",
+		[]string{"closure recorded"},
+		[]TaskStepInput{
+			{ID: "a", Title: "A"},
+			{ID: "b", Title: "B", DependsOn: []string{"a"}},
+			{ID: "c", Title: "C", DependsOn: []string{"b"}},
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.BatchCheckpoint(task.ID, []string{"b"}, "", "invalid closure"); err == nil || !strings.Contains(err.Error(), "incomplete dependencies") {
+		t.Fatalf("accepted incomplete dependency closure: %v", err)
+	}
+	progressed, err := store.BatchCheckpoint(task.ID, []string{"a", "b"}, "c", "closure completed; c started")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if progressed.Steps[0].Status != StepCompleted || progressed.Steps[1].Status != StepCompleted || progressed.Steps[2].Status != StepInProgress {
+		t.Fatalf("unexpected dependency closure state: %#v", progressed.Steps)
+	}
+}
+
+func TestLegacyV1TaskStateLoadsAsCurrentSchema(t *testing.T) {
+	store, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := store.Create("Legacy", "load old state", []string{"loaded"}, []TaskStepInput{{ID: "work", Title: "Work"}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task.SchemaVersion = legacySchemaVersion
+	data, err := json.Marshal(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(store.Root(), task.ID+".json"), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := store.Get(task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.SchemaVersion != SchemaVersion || len(loaded.Steps) != 1 || len(loaded.Steps[0].DependsOn) != 0 {
+		t.Fatalf("legacy task migration = %#v", loaded)
 	}
 }
 

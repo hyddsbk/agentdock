@@ -39,10 +39,116 @@ func normalizeTaskSteps(values []TaskStepInput, now time.Time) ([]TaskStep, erro
 		if phase != PhaseCheck && phase != PhaseExecute && phase != PhaseVerify && phase != PhaseCloseout {
 			return nil, fmt.Errorf("invalid task step phase %q", phase)
 		}
+		dependsOn, err := normalizeDependencyIDs(id, value.DependsOn)
+		if err != nil {
+			return nil, err
+		}
 		seen[id] = struct{}{}
-		steps = append(steps, TaskStep{ID: id, Title: title, Phase: phase, Status: StepPending, UpdatedAt: now})
+		steps = append(steps, TaskStep{ID: id, Title: title, Phase: phase, DependsOn: dependsOn, Status: StepPending, UpdatedAt: now})
+	}
+	if err := validateTaskStepGraph(steps); err != nil {
+		return nil, err
 	}
 	return steps, nil
+}
+
+func normalizeDependencyIDs(stepID string, values []string) ([]string, error) {
+	if len(values) > 12 {
+		return nil, fmt.Errorf("task step %s dependencies cannot exceed 12", stepID)
+	}
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, raw := range values {
+		dependency := strings.TrimSpace(raw)
+		if dependency == "" || dependency != raw || !validStepID(dependency) {
+			return nil, fmt.Errorf("task step %s has invalid dependency %q", stepID, raw)
+		}
+		if dependency == stepID {
+			return nil, fmt.Errorf("task step %s cannot depend on itself", stepID)
+		}
+		if _, exists := seen[dependency]; exists {
+			return nil, fmt.Errorf("task step %s has duplicate dependency %q", stepID, dependency)
+		}
+		seen[dependency] = struct{}{}
+		out = append(out, dependency)
+	}
+	return out, nil
+}
+
+func validateTaskStepGraph(steps []TaskStep) error {
+	byID := make(map[string]TaskStep, len(steps))
+	for _, step := range steps {
+		byID[step.ID] = step
+	}
+	for _, step := range steps {
+		for _, dependency := range step.DependsOn {
+			if _, exists := byID[dependency]; !exists {
+				return fmt.Errorf("task step %s depends on unknown step %q", step.ID, dependency)
+			}
+		}
+	}
+	state := make(map[string]uint8, len(steps))
+	var visit func(string) error
+	visit = func(id string) error {
+		switch state[id] {
+		case 1:
+			return fmt.Errorf("task dependency graph contains a cycle at step %q", id)
+		case 2:
+			return nil
+		}
+		state[id] = 1
+		for _, dependency := range byID[id].DependsOn {
+			if err := visit(dependency); err != nil {
+				return err
+			}
+		}
+		state[id] = 2
+		return nil
+	}
+	for _, step := range steps {
+		if err := visit(step.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ReadyStepIDs returns pending steps whose dependency edges are all completed.
+// A task-level external block suppresses the frontier without mutating step state.
+func ReadyStepIDs(task Task) []string {
+	if task.Status != StatusActive {
+		return nil
+	}
+	ready := make([]string, 0, len(task.Steps))
+	for _, step := range task.Steps {
+		if step.Status != StepPending {
+			continue
+		}
+		if len(unsatisfiedStepDependencies(task.Steps, step, nil)) == 0 {
+			ready = append(ready, step.ID)
+		}
+	}
+	return ready
+}
+
+func unsatisfiedStepDependencies(steps []TaskStep, step TaskStep, completing map[string]struct{}) []string {
+	statusByID := make(map[string]string, len(steps))
+	for _, candidate := range steps {
+		statusByID[candidate.ID] = candidate.Status
+	}
+	blocked := make([]string, 0, len(step.DependsOn))
+	for _, dependency := range step.DependsOn {
+		if statusByID[dependency] == StepCompleted {
+			continue
+		}
+		if completing != nil {
+			if _, completesNow := completing[dependency]; completesNow {
+				continue
+			}
+		}
+		blocked = append(blocked, dependency)
+	}
+	return blocked
 }
 
 func normalizeTemplateReferences(values []TemplateReference) ([]TemplateReference, error) {
@@ -69,7 +175,7 @@ func normalizeTemplateReferences(values []TemplateReference) ([]TemplateReferenc
 
 func validStepID(id string) bool {
 	for _, r := range id {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
 			continue
 		}
 		return false

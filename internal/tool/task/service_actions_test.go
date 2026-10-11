@@ -84,6 +84,10 @@ func TestTaskManageCheckpointExposesLiveProgress(t *testing.T) {
 	if current["id"] != "code" || current["status"] != taskstate.StepInProgress || summary["summary"] != "editing task state" {
 		t.Fatalf("live progress missing: %#v", summary)
 	}
+	frontier := summary["ready_frontier"].([]map[string]any)
+	if summary["ready_step_count"] != 1 || len(frontier) != 1 || frontier[0]["id"] != "test" {
+		t.Fatalf("ready frontier missing from compact summary: %#v", summary)
+	}
 	listed, err := rt.manageTest(context.Background(), map[string]any{"action": "list", "status": "active"})
 	if err != nil {
 		t.Fatal(err)
@@ -218,7 +222,7 @@ func TestTaskManageComposedTemplatesRequireExplicitResult(t *testing.T) {
 	created, err := rt.manageTest(context.Background(), map[string]any{
 		"action": "create", "title": "Develop and deploy", "goal": "combine workflows",
 		"source_template_ids":   []string{"development", "deployment"},
-		"steps":                 []map[string]any{{"id": "code", "title": "Write and test code"}, {"id": "deploy", "title": "Deploy and verify"}},
+		"steps":                 []map[string]any{{"id": "code", "title": "Write and test code"}, {"id": "deploy", "title": "Deploy and verify", "depends_on": []string{"code"}}},
 		"completion_conditions": []string{"tests pass", "production healthy"},
 	})
 	if err != nil {
@@ -229,8 +233,8 @@ func TestTaskManageComposedTemplatesRequireExplicitResult(t *testing.T) {
 		t.Fatal(err)
 	}
 	task := loaded["task"].(taskstate.Task)
-	if len(task.SourceTemplates) != 2 || len(task.Steps) != 2 || len(task.Conditions) != 2 {
-		t.Fatalf("composed task was not recorded: %#v", task)
+	if len(task.SourceTemplates) != 2 || len(task.Steps) != 2 || len(task.Conditions) != 2 || len(task.Steps[1].DependsOn) != 1 || task.Steps[1].DependsOn[0] != "code" {
+		t.Fatalf("composed task was not recorded with dependency edges: %#v", task)
 	}
 }
 

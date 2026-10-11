@@ -45,11 +45,9 @@ func (s *Store) Checkpoint(id, stepID, status, summary string) (Task, error) {
 		if !validStepTransition(step.Status, status) {
 			return fmt.Errorf("cannot move step %s from %s to %s", step.ID, step.Status, status)
 		}
-		if status == StepInProgress {
-			for i := range task.Steps {
-				if i != stepIndex && task.Steps[i].Status == StepInProgress {
-					return fmt.Errorf("step %s is already in progress", task.Steps[i].ID)
-				}
+		if status == StepInProgress || status == StepCompleted {
+			if blocked := unsatisfiedStepDependencies(task.Steps, *step, nil); len(blocked) > 0 {
+				return fmt.Errorf("step %s is blocked by incomplete dependencies: %s", step.ID, strings.Join(blocked, ", "))
 			}
 		}
 		step.Status = status
@@ -103,6 +101,12 @@ func (s *Store) BatchCheckpoint(id string, completedStepIDs []string, currentSte
 			}
 			completedSet[stepID] = struct{}{}
 		}
+		for _, stepID := range completedStepIDs {
+			step := task.Steps[stepIndexes[stepID]]
+			if blocked := unsatisfiedStepDependencies(task.Steps, step, completedSet); len(blocked) > 0 {
+				return fmt.Errorf("step %s is blocked by incomplete dependencies: %s", step.ID, strings.Join(blocked, ", "))
+			}
+		}
 
 		currentStepIndex := -1
 		if currentStepID != "" {
@@ -116,13 +120,8 @@ func (s *Store) BatchCheckpoint(id string, completedStepIDs []string, currentSte
 			if !validStepTransition(task.Steps[stepIndex].Status, StepInProgress) {
 				return fmt.Errorf("cannot move step %s from %s to %s", currentStepID, task.Steps[stepIndex].Status, StepInProgress)
 			}
-			for i := range task.Steps {
-				if task.Steps[i].Status != StepInProgress || i == stepIndex {
-					continue
-				}
-				if _, completing := completedSet[task.Steps[i].ID]; !completing {
-					return fmt.Errorf("step %s is already in progress", task.Steps[i].ID)
-				}
+			if blocked := unsatisfiedStepDependencies(task.Steps, task.Steps[stepIndex], completedSet); len(blocked) > 0 {
+				return fmt.Errorf("step %s is blocked by incomplete dependencies: %s", currentStepID, strings.Join(blocked, ", "))
 			}
 			currentStepIndex = stepIndex
 		}

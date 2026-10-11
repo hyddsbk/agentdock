@@ -3,8 +3,9 @@ package task
 import "github.com/uvwt/agentdock/internal/taskstate"
 
 type StepRequest struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
+	ID        string   `json:"id"`
+	Title     string   `json:"title"`
+	DependsOn []string `json:"depends_on,omitempty"`
 }
 
 type LearningCheckRequest struct {

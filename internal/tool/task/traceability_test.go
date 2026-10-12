@@ -2,6 +2,7 @@ package task
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/uvwt/agentdock/internal/config"
@@ -101,5 +102,38 @@ func TestTaskManageSchemaPublishesTraceabilityFields(t *testing.T) {
 	axisProps := axis["properties"].(map[string]any)
 	if _, ok := axisProps["evidence_bindings"]; !ok {
 		t.Fatal("task_manage outcome axis schema missing evidence_bindings")
+	}
+}
+
+func TestTaskManageRejectsNakedExecRefInGenericExecutionEvidence(t *testing.T) {
+	rt, _ := newTaskTestService(t)
+	created, err := rt.manageTest(context.Background(), map[string]any{
+		"action":                "create",
+		"title":                 "reject naked exec evidence",
+		"goal":                  "fail closed before persistence",
+		"completion_conditions": []string{"done"},
+		"steps":                 []map[string]any{{"id": "verify", "title": "Verify"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskID := created["task_id"].(string)
+
+	_, err = rt.manageTest(context.Background(), map[string]any{
+		"action": "checkpoint", "task_id": taskID, "step_id": "verify",
+		"status": "completed", "summary": "claimed",
+		"execution_evidence": map[string]any{"evidence_refs": []string{"exec://session-aaaaaaaaaaaaaaaaaaaaaaaa"}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "use execution_receipts for exec:// evidence") {
+		t.Fatalf("naked exec ref error = %v", err)
+	}
+
+	got, err := rt.manageTest(context.Background(), map[string]any{"action": "get", "task_id": taskID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	step := got["task"].(taskstate.Task).Steps[0]
+	if step.Status != taskstate.StepPending || step.ExecutionEvidence != nil {
+		t.Fatalf("rejected checkpoint mutated task: %#v", step)
 	}
 }

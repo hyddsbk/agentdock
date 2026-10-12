@@ -128,3 +128,60 @@ func TestOrdinaryTaskRemainsBackwardCompatibleWithoutTraceability(t *testing.T) 
 		t.Fatalf("ordinary checkpoint unexpectedly requires execution evidence: %v", err)
 	}
 }
+
+func TestGenericExecutionEvidenceRejectsNakedExecRefs(t *testing.T) {
+	store, _ := New(t.TempDir())
+	task, err := store.Create(
+		"Generic evidence namespace",
+		"reject receipt identities without attestations",
+		[]string{"done"},
+		[]TaskStepInput{{ID: "verify", Title: "Verify"}},
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = store.CheckpointWithEvidence(task.ID, "verify", StepCompleted, "claimed", nil, &ExecutionEvidence{
+		EvidenceRefs: []string{"exec://session-aaaaaaaaaaaaaaaaaaaaaaaa"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "use execution_receipts for exec:// evidence") {
+		t.Fatalf("naked exec ref error = %v", err)
+	}
+
+	loaded, getErr := store.Get(task.ID)
+	if getErr != nil {
+		t.Fatal(getErr)
+	}
+	if loaded.Steps[0].Status != StepPending || loaded.Steps[0].ExecutionEvidence != nil {
+		t.Fatalf("rejected exec ref mutated task: %#v", loaded.Steps[0])
+	}
+}
+
+func TestGenericExecutionEvidenceKeepsOpaqueOutcomeRefs(t *testing.T) {
+	store, _ := New(t.TempDir())
+	task, err := store.Create(
+		"Opaque evidence namespace",
+		"preserve opaque outcome evidence",
+		[]string{"done"},
+		[]TaskStepInput{{ID: "verify", Title: "Verify"}},
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := store.CheckpointWithEvidence(task.ID, "verify", StepCompleted, "verified", nil, &ExecutionEvidence{
+		EvidenceRefs: []string{
+			"commit://agentdock/abc123",
+			"test://taskstate/TestGenericExecutionEvidenceKeepsOpaqueOutcomeRefs",
+			"artifact://release/report.json",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Steps[0].ExecutionEvidence == nil || len(updated.Steps[0].ExecutionEvidence.EvidenceRefs) != 3 {
+		t.Fatalf("opaque outcome refs not preserved: %#v", updated.Steps[0].ExecutionEvidence)
+	}
+}

@@ -126,10 +126,10 @@ func diagnosticEvidenceSchema() map[string]any {
 
 func executionEvidenceSchema() map[string]any {
 	return map[string]any{
-		"type": "object", "description": "Compact implementation/verification evidence for a traceable step checkpoint. Raw logs and source dumps belong in referenced artifacts.", "additionalProperties": false,
+		"type": "object", "description": "Compact opaque implementation/verification evidence for a traceable step checkpoint. Use commit://, test://, artifact://, issue:// or similar refs. exec:// is reserved for executor-attested execution_receipts and is rejected here.", "additionalProperties": false,
 		"required": []string{"evidence_refs"},
 		"properties": map[string]any{
-			"evidence_refs": map[string]any{"type": "array", "minItems": 1, "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Pointers such as commit://, test://, artifact://, issue://, or receipt:// that prove the mapped requirements were implemented or verified."},
+			"evidence_refs": map[string]any{"type": "array", "minItems": 1, "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Opaque outcome pointers such as commit://, test://, artifact://, or issue://. Do not place exec:// receipt identities here; supply them through execution_receipts so AgentDock can claim and attest them."},
 		},
 	}
 }

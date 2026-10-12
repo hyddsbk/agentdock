@@ -47,6 +47,12 @@ The embedded `bundle_sha256` protects the bundle against changes where the attac
 
 P9 adds an authentication layer above P8 without changing Task, execution-evidence, or Evolution write semantics. P8 remains the content-integrity authority; P9 answers a separate question: which AgentDock node authenticated this exact P8 bundle, and is that signer still trusted?
 
+### Execution evidence namespace closure
+
+`exec://` is a strong executor-receipt identity, not a generic opaque evidence URI. A Task checkpoint may persist `exec://` evidence only when AgentDock also persists the matching trusted executor attestation and receipt claim. Public `execution_evidence.evidence_refs` is therefore reserved for opaque outcome pointers such as `commit://`, `test://`, `artifact://`, or `issue://`; a naked `exec://` ref is rejected at checkpoint time with guidance to use `execution_receipts`.
+
+This prevents a delayed integrity failure where a checkpoint appears valid but a later P8/P9 audit export discovers that the referenced receipt has no owner claim. Declared execution contracts and TDD receipt paths remain unchanged: their server-side receipt resolution/claiming path is the authority that turns an executor receipt into portable provenance.
+
 The P9 contracts are:
 
 - `audit-signature-statement/v1`: the canonical statement signed by a node audit key;

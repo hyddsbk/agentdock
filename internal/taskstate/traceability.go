@@ -107,12 +107,28 @@ func normalizeExecutionEvidence(stepID string, input *ExecutionEvidence) (*Execu
 		refs = append(refs, ref)
 	}
 	attestations := make([]*ExecutionRun, 0, len(input.Attestations))
+	attestedRefs := make(map[string]struct{}, len(input.Attestations))
 	for _, run := range input.Attestations {
 		if err := validateExecutionRunIntegrity(run); err != nil {
 			return nil, fmt.Errorf("step %s has invalid execution attestation: %w", stepID, err)
 		}
+		if _, exists := seen[run.EvidenceRef]; !exists {
+			return nil, fmt.Errorf("step %s execution attestation ref %q is not declared in evidence_refs", stepID, run.EvidenceRef)
+		}
+		if _, duplicate := attestedRefs[run.EvidenceRef]; duplicate {
+			return nil, fmt.Errorf("step %s has duplicate execution attestation ref %q", stepID, run.EvidenceRef)
+		}
+		attestedRefs[run.EvidenceRef] = struct{}{}
 		copyRun := *run
 		attestations = append(attestations, &copyRun)
+	}
+	for _, ref := range refs {
+		if !strings.HasPrefix(ref, "exec://") {
+			continue
+		}
+		if _, ok := attestedRefs[ref]; !ok {
+			return nil, fmt.Errorf("step %s generic execution evidence cannot use %q without a trusted executor attestation; use execution_receipts for exec:// evidence", stepID, ref)
+		}
 	}
 	return &ExecutionEvidence{EvidenceRefs: refs, Attestations: attestations}, nil
 }

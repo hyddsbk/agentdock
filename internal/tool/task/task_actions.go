@@ -9,7 +9,7 @@ import (
 	"github.com/uvwt/agentdock/internal/taskstate"
 )
 
-var taskActions = []string{"create", "list", "get", "backtrace", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}
+var taskActions = []string{"create", "list", "get", "backtrace", "revalidate", "export_audit_bundle", "verify_audit_bundle", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}
 
 var workflowTemplateActions = []string{"publish", "retire", "list", "get", "get_many", "match", "vector_index"}
 
@@ -45,6 +45,9 @@ type taskManageInput struct {
 	IntentSpec           *taskstate.OutcomeAxis
 	EngineeringPolicy    *taskstate.OutcomeAxis
 	ProvenanceQuery      *ProvenanceQueryRequest
+	ReviewRevision       string
+	AuditBundle          *PortableAuditBundle
+	ExpectedBundleSHA256 string
 }
 
 type workflowTemplateInput struct {
@@ -121,6 +124,9 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 		IntentSpec:           request.IntentSpec,
 		EngineeringPolicy:    request.EngineeringPolicy,
 		ProvenanceQuery:      request.ProvenanceQuery,
+		ReviewRevision:       strings.TrimSpace(request.ReviewRevision),
+		AuditBundle:          request.AuditBundle,
+		ExpectedBundleSHA256: strings.ToLower(strings.TrimSpace(request.ExpectedBundleSHA256)),
 	}
 	if request.CompletedStepIDs != nil {
 		input.CompletedStepIDsSet = true
@@ -152,6 +158,21 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 	}
 	if input.Action == "backtrace" && input.ProvenanceQuery == nil {
 		return input, toolErrorDetails("VALIDATION_ERROR", "provenance_query is required for backtrace", "validation", map[string]any{"field": "provenance_query"})
+	}
+	if input.ReviewRevision != "" && input.Action != "revalidate" && input.Action != "export_audit_bundle" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "review_revision is only valid for revalidate or export_audit_bundle", "validation", map[string]any{"field": "review_revision", "action": input.Action})
+	}
+	if input.AuditBundle != nil && input.Action != "verify_audit_bundle" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "audit_bundle is only valid for verify_audit_bundle", "validation", map[string]any{"field": "audit_bundle", "action": input.Action})
+	}
+	if input.Action == "verify_audit_bundle" && input.AuditBundle == nil {
+		return input, toolErrorDetails("VALIDATION_ERROR", "audit_bundle is required for verify_audit_bundle", "validation", map[string]any{"field": "audit_bundle"})
+	}
+	if input.ExpectedBundleSHA256 != "" && input.Action != "verify_audit_bundle" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "expected_bundle_sha256 is only valid for verify_audit_bundle", "validation", map[string]any{"field": "expected_bundle_sha256", "action": input.Action})
+	}
+	if (input.Action == "revalidate" || input.Action == "export_audit_bundle") && strings.TrimSpace(input.TaskID) == "" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "task_id is required for provenance integrity actions", "validation", map[string]any{"field": "task_id", "action": input.Action})
 	}
 	if (strings.TrimSpace(input.NextStepID) != "" || len(input.ContextRefs) > 0) && input.Action != "handoff" {
 		return input, toolErrorDetails("VALIDATION_ERROR", "next_step_id and top-level context_refs are only valid for handoff", "validation", map[string]any{"action": input.Action})
@@ -296,6 +317,20 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 			return nil, taskToolError(traceErr)
 		}
 		return Result{"action": input.Action, "backtrace": trace, "state_dir": s.tasks.Root()}, nil
+	case "revalidate":
+		report, _ := s.provenanceIntegrity(ctx, input.TaskID, input.ReviewRevision)
+		return Result{"action": input.Action, "integrity": report, "state_dir": s.tasks.Root()}, nil
+	case "export_audit_bundle":
+		report, bundle := s.provenanceIntegrity(ctx, input.TaskID, input.ReviewRevision)
+		result := Result{"action": input.Action, "integrity": report, "state_dir": s.tasks.Root()}
+		if report.Valid && bundle != nil {
+			result["audit_bundle"] = *bundle
+			result["bundle_sha256"] = bundle.Manifest.BundleSHA256
+		}
+		return result, nil
+	case "verify_audit_bundle":
+		report := VerifyPortableAuditBundleExpected(*input.AuditBundle, input.ExpectedBundleSHA256)
+		return Result{"action": input.Action, "integrity": report, "bundle_sha256": report.BundleSHA256, "state_dir": s.tasks.Root()}, nil
 	case "get":
 		task, err = s.tasks.Get(input.TaskID)
 		if err != nil {

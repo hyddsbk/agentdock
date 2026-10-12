@@ -72,5 +72,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) > 0 && args[0] == "nexus" {
 		return runNexusCommand(ctx, args[1:], stdout, stderr)
 	}
+	if len(args) > 0 && args[0] == "audit" {
+		return runAuditCommand(args[1:], stdout)
+	}
 	return runServer(ctx, args, stderr)
 }

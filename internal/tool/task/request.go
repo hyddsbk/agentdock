@@ -76,6 +76,9 @@ type ManageRequest struct {
 	IntentSpec           *taskstate.OutcomeAxis            `json:"intent_spec,omitempty"`
 	EngineeringPolicy    *taskstate.OutcomeAxis            `json:"engineering_policy,omitempty"`
 	ProvenanceQuery      *ProvenanceQueryRequest           `json:"provenance_query,omitempty"`
+	ReviewRevision       string                            `json:"review_revision,omitempty"`
+	AuditBundle          *PortableAuditBundle              `json:"audit_bundle,omitempty"`
+	ExpectedBundleSHA256 string                            `json:"expected_bundle_sha256,omitempty"`
 }
 
 // WorkflowRequest 是 workflow_template_manage 的强类型输入。

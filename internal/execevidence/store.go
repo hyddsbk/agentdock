@@ -119,6 +119,22 @@ func (s *Store) Resolve(ref string) (Receipt, error) {
 	return s.resolvePath(s.receiptPath(sessionID), sessionID)
 }
 
+// VerifyReceipt validates one portable receipt without consulting a Store.
+// It recomputes the command and receipt digests from the serialized fields and
+// fails closed when the embedded receipt_sha256 no longer matches.
+func VerifyReceipt(receipt Receipt) (Receipt, error) {
+	storedDigest := strings.ToLower(strings.TrimSpace(receipt.ReceiptSHA256))
+	receipt.ReceiptSHA256 = ""
+	normalized, err := normalizeReceipt(receipt)
+	if err != nil {
+		return Receipt{}, err
+	}
+	if storedDigest == "" || storedDigest != normalized.ReceiptSHA256 {
+		return Receipt{}, errors.New("execution receipt integrity check failed")
+	}
+	return normalized, nil
+}
+
 // ResolveClaim returns the durable owner reservation for one executor receipt.
 // It never creates or changes a claim and fails closed on missing or malformed data.
 func (s *Store) ResolveClaim(ref string) (Claim, error) {
@@ -285,16 +301,7 @@ func (s *Store) resolvePath(path, sessionID string) (Receipt, error) {
 	if receipt.SessionID != sessionID {
 		return Receipt{}, errors.New("execution receipt session id mismatch")
 	}
-	storedDigest := strings.ToLower(strings.TrimSpace(receipt.ReceiptSHA256))
-	receipt.ReceiptSHA256 = ""
-	normalized, err := normalizeReceipt(receipt)
-	if err != nil {
-		return Receipt{}, err
-	}
-	if storedDigest == "" || storedDigest != normalized.ReceiptSHA256 {
-		return Receipt{}, errors.New("execution receipt integrity check failed")
-	}
-	return normalized, nil
+	return VerifyReceipt(receipt)
 }
 
 func (s *Store) receiptPath(sessionID string) string {

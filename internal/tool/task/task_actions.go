@@ -9,7 +9,7 @@ import (
 	"github.com/uvwt/agentdock/internal/taskstate"
 )
 
-var taskActions = []string{"create", "list", "get", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}
+var taskActions = []string{"create", "list", "get", "backtrace", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}
 
 var workflowTemplateActions = []string{"publish", "retire", "list", "get", "get_many", "match", "vector_index"}
 
@@ -44,6 +44,7 @@ type taskManageInput struct {
 	Risks                []string
 	IntentSpec           *taskstate.OutcomeAxis
 	EngineeringPolicy    *taskstate.OutcomeAxis
+	ProvenanceQuery      *ProvenanceQueryRequest
 }
 
 type workflowTemplateInput struct {
@@ -119,6 +120,7 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 		Risks:                append([]string(nil), request.Risks...),
 		IntentSpec:           request.IntentSpec,
 		EngineeringPolicy:    request.EngineeringPolicy,
+		ProvenanceQuery:      request.ProvenanceQuery,
 	}
 	if request.CompletedStepIDs != nil {
 		input.CompletedStepIDsSet = true
@@ -144,6 +146,12 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 	}
 	if len(input.VerifiedEvidence) > 0 && input.Action != "final_review" {
 		return input, toolErrorDetails("VALIDATION_ERROR", "verified_evidence is only valid for final_review", "validation", map[string]any{"field": "verified_evidence", "action": input.Action})
+	}
+	if input.ProvenanceQuery != nil && input.Action != "backtrace" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "provenance_query is only valid for backtrace", "validation", map[string]any{"field": "provenance_query", "action": input.Action})
+	}
+	if input.Action == "backtrace" && input.ProvenanceQuery == nil {
+		return input, toolErrorDetails("VALIDATION_ERROR", "provenance_query is required for backtrace", "validation", map[string]any{"field": "provenance_query"})
 	}
 	if (strings.TrimSpace(input.NextStepID) != "" || len(input.ContextRefs) > 0) && input.Action != "handoff" {
 		return input, toolErrorDetails("VALIDATION_ERROR", "next_step_id and top-level context_refs are only valid for handoff", "validation", map[string]any{"action": input.Action})
@@ -282,6 +290,12 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 			items = append(items, compactTaskListItem(item))
 		}
 		return Result{"action": input.Action, "tasks": items, "count": len(items), "state_dir": s.tasks.Root()}, nil
+	case "backtrace":
+		trace, traceErr := s.provenanceBacktrace(ctx, input.ProvenanceQuery)
+		if traceErr != nil {
+			return nil, taskToolError(traceErr)
+		}
+		return Result{"action": input.Action, "backtrace": trace, "state_dir": s.tasks.Root()}, nil
 	case "get":
 		task, err = s.tasks.Get(input.TaskID)
 		if err != nil {

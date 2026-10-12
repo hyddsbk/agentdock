@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/uvwt/agentdock/internal/config"
+	evolutionpkg "github.com/uvwt/agentdock/internal/evolution"
 	"github.com/uvwt/agentdock/internal/execevidence"
 	"github.com/uvwt/agentdock/internal/taskstate"
 )
@@ -15,6 +16,10 @@ type EvolutionProvider interface {
 	Candidates(context.Context, taskstate.Task) ([]taskstate.EvolutionContextItem, error)
 	ValidateBindings(context.Context, taskstate.Task, []taskstate.EvolutionBinding) ([]taskstate.EvolutionBinding, error)
 	ResolveBindings(context.Context, taskstate.Task) error
+}
+
+type EvolutionEvidenceProvider interface {
+	EvidenceRecords(context.Context, string) ([]evolutionpkg.Record, error)
 }
 
 type Service struct {

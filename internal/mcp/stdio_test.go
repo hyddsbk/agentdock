@@ -174,7 +174,7 @@ func TestServeStdioHidesNexusExtensionsWithoutNexus(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(encoded)
-	for _, leaked := range []string{"learning_checks", "source_template_ids", "template_id", "guidance_context", "review_revision", "evolution_candidates", "evolution_warning", "Evolution", "evolution"} {
+	for _, leaked := range []string{"learning_checks", "source_template_ids", "template_id", "guidance_context", "evolution_candidates", "evolution_warning", "Evolution", "evolution"} {
 		if strings.Contains(text, leaked) {
 			t.Fatalf("task_manage schema leaked %q without Nexus: %s", leaked, text)
 		}

@@ -1,6 +1,7 @@
 package evolution
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -38,6 +39,18 @@ func newFakeLifecycleServer(t *testing.T) (*httptest.Server, *fakeLifecycleStore
 				}
 				if query.Query != "" && !strings.Contains(strings.ToLower(record.Statement+" "+record.CanonicalKey), strings.ToLower(query.Query)) {
 					continue
+				}
+				if query.EvidenceRef != "" {
+					found := false
+					for _, evidence := range record.Evidence {
+						if evidence.Ref == query.EvidenceRef {
+							found = true
+							break
+						}
+					}
+					if !found {
+						continue
+					}
 				}
 				items = append(items, record)
 			}
@@ -681,5 +694,42 @@ func TestBlindedCreateTimeValidationCanPromoteActiveToVerified(t *testing.T) {
 	}
 	if taskGuided(blind, id) {
 		t.Fatalf("blinded validation task unexpectedly marked target as guided: %#v", blind.EvolutionGuidanceSeen)
+	}
+}
+
+func TestEvidenceRecordsUsesExactReadOnlyEvidenceFilter(t *testing.T) {
+	service, _, server := newTestService(t)
+	defer server.Close()
+
+	// The query contract itself is exercised by a dedicated server below.
+	var got Query
+	evidenceRef := "task:tsk_p7:review:rev_p7:verified:0"
+	exact := Record{
+		EvolutionID: "evo_7777777777777777", Statement: "exact", Type: "runbook",
+		Scope: "global", Project: "global", Status: StatusActive, PolicyVersion: PolicyVersion, Revision: 3,
+		Evidence: []Evidence{{Ref: evidenceRef, Relation: RelationSupport, TaskID: "tsk_p7", ReviewRevision: "rev_p7"}},
+	}
+	queryServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		_ = json.NewEncoder(w).Encode(queryResult{Records: []Record{
+			exact,
+			{EvolutionID: "evo_8888888888888888", Statement: "wrong", Evidence: []Evidence{{Ref: "other"}}},
+		}, Count: 2})
+	}))
+	defer queryServer.Close()
+	service.client = client{config: func() config.Config {
+		return config.Config{NexusEndpoint: queryServer.URL, NexusDeviceToken: "test"}
+	}}
+	records, err := service.EvidenceRecords(context.Background(), evidenceRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.EvidenceRef != evidenceRef {
+		t.Fatalf("query evidence_ref = %q", got.EvidenceRef)
+	}
+	if len(records) != 1 || records[0].EvolutionID != exact.EvolutionID {
+		t.Fatalf("records = %#v", records)
 	}
 }

@@ -11,7 +11,7 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 	stringProp := toolcontract.String
 	boundedIntProp := toolcontract.BoundedInteger
 	props := map[string]any{
-		"action":                map[string]any{"type": "string", "description": "Task lifecycle action. Use checkpoint to update progress and handoff to persist a fresh-session resume packet.", "enum": []string{"create", "list", "get", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}},
+		"action":                map[string]any{"type": "string", "description": "Task lifecycle action. Use checkpoint to update progress and handoff to persist a fresh-session resume packet.", "enum": []string{"create", "list", "get", "backtrace", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}},
 		"task_id":               stringProp("Persistent task id for get, checkpoint, block, resume, handoff, final_review, or complete."),
 		"title":                 stringProp("Short task title. Required for action=create."),
 		"goal":                  stringProp("Fixed task goal. Required for action=create."),
@@ -34,6 +34,7 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 		"risks":                 map[string]any{"type": "array", "maxItems": 16, "items": map[string]any{"type": "string"}, "description": "Unresolved risks for handoff, or remaining risks for a failed final_review."},
 		"intent_spec":           outcomeAxisSchema("Intent/spec compliance outcome. Required for final_review."),
 		"engineering_policy":    outcomeAxisSchema("Engineering/policy compliance outcome. Required for final_review."),
+		"provenance_query":      provenanceQuerySchema(cfg.NexusEndpoint != ""),
 	}
 
 	if cfg.NexusEndpoint == "" {
@@ -66,6 +67,28 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 		},
 	}
 	return taskManageInputObject(props)
+}
+
+func provenanceQuerySchema(withNexus bool) map[string]any {
+	kinds := []string{"final_review_claim", "requirement", "exec_receipt"}
+	description := "Read-only provenance root for action=backtrace. Resolves one Final Review claim, requirement ref, or exec:// receipt into the same audit graph."
+	properties := map[string]any{
+		"kind":            map[string]any{"type": "string", "enum": kinds},
+		"ref":             map[string]any{"type": "string", "description": "Exact root reference. Final Review claims accept canonical task:<id>:review:<revision>:<scope>:<index> refs or exact claim text when task_id is supplied."},
+		"task_id":         map[string]any{"type": "string", "description": "Optional hard task scope; required for requirement refs and plain-text Final Review claims."},
+		"review_revision": map[string]any{"type": "string", "description": "Optional immutable final-review revision scope. A mismatch fails closed."},
+	}
+	if withNexus {
+		kinds = append(kinds, "evolution_evidence")
+		properties["kind"].(map[string]any)["enum"] = kinds
+		properties["evolution_id"] = map[string]any{"type": "string", "description": "Optional hard Evolution scope. Required only to disambiguate an evidence ref consumed by multiple Evolution records."}
+		description = "Read-only provenance root for action=backtrace. Resolves one Final Review claim, Evolution evidence ref, requirement ref, or exec:// receipt into the same audit graph."
+	}
+	return map[string]any{
+		"type": "object", "additionalProperties": false, "required": []string{"kind", "ref"},
+		"description": description,
+		"properties":  properties,
+	}
 }
 
 func diagnosticEvidenceSchema() map[string]any {
@@ -179,6 +202,13 @@ func taskManageInputObject(props map[string]any) map[string]any {
 			},
 			"then": map[string]any{"required": []string{"task_id", "summary"}},
 		},
+		map[string]any{
+			"if": map[string]any{
+				"properties": map[string]any{"action": map[string]any{"const": "backtrace"}},
+				"required":   []string{"action"},
+			},
+			"then": map[string]any{"required": []string{"provenance_query"}},
+		},
 	}
 	return schema
 }
@@ -200,6 +230,7 @@ func ManageOutputSchema(cfg config.Config) map[string]any {
 		"state_dir":            stringProp("Local AgentDock task state directory."),
 		"next_required_action": stringProp("Concise guidance for checkpoint progress, handoff/resume, or final review."),
 		"resume_context":       objectProp("Derived fresh-session resume packet returned by handoff and get when a current handoff exists."),
+		"backtrace":            objectProp("Read-only provenance-backtrace/v1 graph returned only by action=backtrace."),
 	}
 	if cfg.NexusEndpoint != "" {
 		props["next_required_action"] = stringProp("Concise guidance for checkpoint progress, handoff/resume, template composition, or final review.")

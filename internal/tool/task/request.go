@@ -35,6 +35,14 @@ type ExecutionReceiptRequest struct {
 	Ref     string `json:"ref"`
 }
 
+type ProvenanceQueryRequest struct {
+	Kind           string `json:"kind"`
+	Ref            string `json:"ref"`
+	TaskID         string `json:"task_id,omitempty"`
+	EvolutionID    string `json:"evolution_id,omitempty"`
+	ReviewRevision string `json:"review_revision,omitempty"`
+}
+
 // ManageRequest 只表达 task_manage 对模型公开的输入字段。
 // 持久化状态中的 phase、bound_at 等内部字段在规范化阶段由 Task 域模型补齐，不能从边界注入。
 type ManageRequest struct {
@@ -67,6 +75,7 @@ type ManageRequest struct {
 	Risks                []string                          `json:"risks,omitempty"`
 	IntentSpec           *taskstate.OutcomeAxis            `json:"intent_spec,omitempty"`
 	EngineeringPolicy    *taskstate.OutcomeAxis            `json:"engineering_policy,omitempty"`
+	ProvenanceQuery      *ProvenanceQueryRequest           `json:"provenance_query,omitempty"`
 }
 
 // WorkflowRequest 是 workflow_template_manage 的强类型输入。

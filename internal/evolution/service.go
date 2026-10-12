@@ -66,6 +66,29 @@ func (s *Service) Guidance(ctx context.Context, task taskstate.Task) ([]taskstat
 	return items, nil
 }
 
+// EvidenceRecords performs an exact, read-only reverse lookup of Evolution records
+// that consumed one persisted final-review evidence reference.
+func (s *Service) EvidenceRecords(ctx context.Context, ref string) ([]Record, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" || len(ref) > 512 || strings.ContainsAny(ref, "\r\n") {
+		return nil, errors.New("invalid evidence_ref")
+	}
+	records, err := s.client.query(ctx, Query{EvidenceRef: ref, Limit: 50})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Record, 0, len(records))
+	for _, record := range records {
+		for _, evidence := range record.Evidence {
+			if evidence.Ref == ref {
+				out = append(out, record)
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
 func (s *Service) Candidates(ctx context.Context, task taskstate.Task) ([]taskstate.EvolutionContextItem, error) {
 	if task.FinalReview == nil || task.FinalReview.ReviewRevision == "" {
 		return nil, nil

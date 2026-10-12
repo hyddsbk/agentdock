@@ -98,6 +98,7 @@ type Result struct {
 type Query struct {
 	Query       string   `json:"query"`
 	EvolutionID string   `json:"evolution_id,omitempty"`
+	EvidenceRef string   `json:"evidence_ref,omitempty"`
 	Statuses    []string `json:"statuses,omitempty"`
 	Types       []string `json:"types,omitempty"`
 	Scope       string   `json:"scope,omitempty"`

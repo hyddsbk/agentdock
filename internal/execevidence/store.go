@@ -32,11 +32,13 @@ type Receipt struct {
 	ReceiptSHA256 string    `json:"receipt_sha256"`
 }
 
-type claimRecord struct {
+type Claim struct {
 	Ref       string    `json:"ref"`
 	ClaimKey  string    `json:"claim_key"`
 	ClaimedAt time.Time `json:"claimed_at"`
 }
+
+type claimRecord = Claim
 
 type Store struct {
 	root         string
@@ -115,6 +117,33 @@ func (s *Store) Resolve(ref string) (Receipt, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.resolvePath(s.receiptPath(sessionID), sessionID)
+}
+
+// ResolveClaim returns the durable owner reservation for one executor receipt.
+// It never creates or changes a claim and fails closed on missing or malformed data.
+func (s *Store) ResolveClaim(ref string) (Claim, error) {
+	if s == nil {
+		return Claim{}, errors.New("execution evidence store is not configured")
+	}
+	sessionID, err := parseRef(ref)
+	if err != nil {
+		return Claim{}, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	data, err := os.ReadFile(s.claimPath(sessionID))
+	if err != nil {
+		return Claim{}, fmt.Errorf("read execution receipt claim: %w", err)
+	}
+	var claim Claim
+	if err := json.Unmarshal(data, &claim); err != nil {
+		return Claim{}, fmt.Errorf("decode execution receipt claim: %w", err)
+	}
+	expectedRef := receiptRef(sessionID)
+	if claim.Ref != expectedRef || strings.TrimSpace(claim.ClaimKey) == "" || len(claim.ClaimKey) > 512 || claim.ClaimedAt.IsZero() {
+		return Claim{}, errors.New("execution receipt claim is invalid")
+	}
+	return claim, nil
 }
 
 // WithClaims resolves and durably reserves every receipt for claimKey before fn.

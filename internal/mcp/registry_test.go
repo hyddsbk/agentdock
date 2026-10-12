@@ -222,8 +222,8 @@ func assertObjectSchema(t *testing.T, name, kind string, schema map[string]any) 
 
 func TestTaskManageSchemaExposesLifecycleActions(t *testing.T) {
 	props := schemaProperties(t, "task_manage")
-	assertSameStrings(t, enumStrings(t, props["action"]), []string{"create", "list", "get", "checkpoint", "block", "resume", "handoff", "final_review", "complete"})
-	for _, name := range []string{"completion_conditions", "steps", "step_id", "completed_step_ids", "current_step_id", "next_step_id", "context_refs", "status", "summary", "verified", "risks"} {
+	assertSameStrings(t, enumStrings(t, props["action"]), []string{"create", "list", "get", "backtrace", "checkpoint", "block", "resume", "handoff", "final_review", "complete"})
+	for _, name := range []string{"completion_conditions", "steps", "step_id", "completed_step_ids", "current_step_id", "next_step_id", "context_refs", "status", "summary", "verified", "risks", "provenance_query"} {
 		if _, ok := props[name]; !ok {
 			t.Fatalf("task_manage input schema missing %q", name)
 		}

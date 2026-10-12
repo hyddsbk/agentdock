@@ -125,6 +125,8 @@ type capabilitySkillItem struct {
 	Description string `json:"description"`
 	File        string `json:"file"`
 	Bundled     bool   `json:"bundled,omitempty"`
+	SkillRef    string `json:"skill_ref"`
+	SourceType  string `json:"source_type"`
 }
 
 type capabilityCommonSkillIndex struct {
@@ -138,6 +140,8 @@ type capabilityCommonSkillItem struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	File        string `json:"file"`
+	SkillRef    string `json:"skill_ref"`
+	SourceType  string `json:"source_type"`
 }
 
 type capabilityDynamicMCPItem struct {
@@ -230,6 +234,8 @@ func (r *Runtime) skillCapabilityIndex() ([]capabilitySkillItem, error) {
 			Description: truncateString(strings.TrimSpace(skill.Description), 160),
 			File:        skill.File,
 			Bundled:     skill.Bundled,
+			SkillRef:    skill.SkillRef,
+			SourceType:  skill.SourceType,
 		})
 	}
 	return items, nil

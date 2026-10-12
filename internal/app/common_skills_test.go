@@ -37,6 +37,9 @@ func TestCommonSkillCapabilityIndexListsValidSkillsInStableOrder(t *testing.T) {
 	if index.Items[0].File != filepath.Join(root, "a-dir", "SKILL.md") {
 		t.Fatalf("common Skill file path = %q", index.Items[0].File)
 	}
+	if index.Items[0].SkillRef != "skill://shared/a-skill" || index.Items[0].SourceType != "shared" {
+		t.Fatalf("common Skill provenance = %#v", index.Items[0])
+	}
 	if len(index.Items[0].Description) > commonSkillDescriptionBytes {
 		t.Fatalf("description was not truncated: %q", index.Items[0].Description)
 	}

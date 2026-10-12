@@ -51,14 +51,17 @@ func TestAgentDockContextToolReturnsStructuredRuntimeIndex(t *testing.T) {
 			break
 		}
 	}
-	if demo == nil || demo.Description != "Use this Skill for context index tests." || demo.File != "skill://demo-skill/SKILL.md" {
+	if demo == nil || demo.Description != "Use this Skill for context index tests." || demo.File != "skill://demo-skill/SKILL.md" ||
+		demo.SkillRef != "skill://managed/demo-skill" || demo.SourceType != "managed" {
 		t.Fatalf("structured Skill index missing demo-skill: %#v", got.Skills)
 	}
 	if got.CommonSkills == nil || got.CommonSkills.Total != 1 || len(got.CommonSkills.Items) != 1 {
 		t.Fatalf("common Skill index = %#v", got.CommonSkills)
 	}
 	commonDemo := got.CommonSkills.Items[0]
-	if commonDemo.Name != "demo-skill" || commonDemo.Description != "Lower-priority common Skill." || commonDemo.File != filepath.Join(home, ".agents", "skills", "demo-common", "SKILL.md") {
+	if commonDemo.Name != "demo-skill" || commonDemo.Description != "Lower-priority common Skill." ||
+		commonDemo.File != filepath.Join(home, ".agents", "skills", "demo-common", "SKILL.md") ||
+		commonDemo.SkillRef != "skill://shared/demo-skill" || commonDemo.SourceType != "shared" {
 		t.Fatalf("common Skill index missing duplicate demo-skill: %#v", got.CommonSkills)
 	}
 	if got.DynamicMCP == nil || got.WorkflowTemplates == nil || got.Rules == nil {
@@ -284,12 +287,14 @@ func TestCapabilitySkillItemExposesOnlyLightweightIndexFields(t *testing.T) {
 		Description: "Desktop automation.",
 		File:        "skill://desktop/SKILL.md",
 		Bundled:     true,
+		SkillRef:    "skill://managed/desktop",
+		SourceType:  "managed",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	text := string(data)
-	for _, want := range []string{`"name"`, `"description"`, `"file"`, `"bundled"`} {
+	for _, want := range []string{`"name"`, `"description"`, `"file"`, `"bundled"`, `"skill_ref"`, `"source_type"`} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("Skill index JSON missing %s: %s", want, text)
 		}

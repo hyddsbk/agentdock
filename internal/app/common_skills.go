@@ -48,6 +48,8 @@ func commonSkillCapabilityIndex() (*capabilityCommonSkillIndex, error) {
 			Name:        metadata.Name,
 			Description: truncateString(strings.TrimSpace(metadata.Description), commonSkillDescriptionBytes),
 			File:        documentPath,
+			SkillRef:    "skill://shared/" + metadata.Name,
+			SourceType:  "shared",
 		})
 	}
 

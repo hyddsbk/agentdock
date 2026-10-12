@@ -1,9 +1,12 @@
 package audittrust
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/uvwt/agentdock/internal/secretstore"
 )
 
 func TestAuditTrustInitSignVerify(t *testing.T) {
@@ -180,4 +183,96 @@ func hasFinding(report VerificationReport, code string) bool {
 		}
 	}
 	return false
+}
+
+func TestLegacyTrustStoreMigratesToProtectedV2PreservingRoot(t *testing.T) {
+	home := t.TempDir()
+	base := time.Date(2026, 10, 12, 8, 40, 0, 0, time.UTC)
+	registry, err := Init(home, Subject{NodeID: "node_migrate", DeviceID: "device_migrate"}, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	protected, err := os.ReadFile(storePath(home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := secretstore.Unprotect(protected, storeSecretPurpose)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(raw)
+	if err := os.WriteFile(legacyStorePath(home), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(storePath(home)); err != nil {
+		t.Fatal(err)
+	}
+
+	migrated, err := RegistryFromHome(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if migrated.RootKeyID != registry.RootKeyID || migrated.Revision != registry.Revision || ActiveKeyID(migrated) != ActiveKeyID(registry) {
+		t.Fatalf("migration changed trust identity: before=%#v after=%#v", registry, migrated)
+	}
+	if _, err := os.Stat(legacyStorePath(home)); !os.IsNotExist(err) {
+		t.Fatalf("legacy plaintext store still exists after migration: %v", err)
+	}
+	v2, err := os.ReadFile(storePath(home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(v2), "root_private_key") {
+		t.Fatal("protected v2 store contains plaintext private-key fields")
+	}
+	if _, err := secretstore.Unprotect(v2, storeSecretPurpose); err != nil {
+		t.Fatalf("protected v2 store cannot be unprotected: %v", err)
+	}
+
+	hash := strings.Repeat("e", 64)
+	signature, err := Sign(home, SignInput{
+		BundleContract: "provenance-audit-bundle/v1",
+		BundleSHA256:   hash,
+		TaskID:         "tsk_migrate",
+		ReviewRevision: "rev_migrate",
+	}, base.Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := VerifyExpected(migrated, signature, registry.RootKeyID, hash, registry.Revision, base.Add(2*time.Minute))
+	if !report.Valid {
+		t.Fatalf("signature after migration did not verify: %#v", report)
+	}
+}
+
+func TestProtectedStoreCleansEquivalentLegacyCrashResidue(t *testing.T) {
+	home := t.TempDir()
+	base := time.Date(2026, 10, 12, 8, 45, 0, 0, time.UTC)
+	registry, err := Init(home, Subject{NodeID: "node_cleanup", DeviceID: "device_cleanup"}, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	protected, err := os.ReadFile(storePath(home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := secretstore.Unprotect(protected, storeSecretPurpose)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(raw)
+	if err := os.WriteFile(legacyStorePath(home), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := RegistryFromHome(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RootKeyID != registry.RootKeyID || got.Revision != registry.Revision {
+		t.Fatalf("crash-residue cleanup changed registry: %#v", got)
+	}
+	if _, err := os.Stat(legacyStorePath(home)); !os.IsNotExist(err) {
+		t.Fatalf("equivalent legacy crash residue still exists: %v", err)
+	}
 }

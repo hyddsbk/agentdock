@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -142,10 +143,12 @@ func Init(home string, subject Subject, now time.Time) (Registry, error) {
 	}
 	defer release()
 	path := storePath(home)
-	if _, err := os.Lstat(path); err == nil {
-		return Registry{}, errors.New("audit trust store already exists")
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return Registry{}, fmt.Errorf("inspect audit trust store: %w", err)
+	for _, candidate := range []string{path, legacyStorePath(home)} {
+		if _, err := os.Lstat(candidate); err == nil {
+			return Registry{}, errors.New("audit trust store already exists")
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return Registry{}, fmt.Errorf("inspect audit trust store: %w", err)
+		}
 	}
 
 	rootPublic, rootPrivate, err := ed25519.GenerateKey(rand.Reader)
@@ -185,11 +188,14 @@ func Init(home string, subject Subject, now time.Time) (Registry, error) {
 }
 
 func RegistryFromHome(home string) (Registry, error) {
-	store, err := loadStore(storePath(strings.TrimSpace(home)))
+	home = strings.TrimSpace(home)
+	release, err := acquireStoreLock(home)
 	if err != nil {
 		return Registry{}, err
 	}
-	if err := validatePrivateStore(store); err != nil {
+	defer release()
+	store, err := loadOrMigrateStoreUnlocked(home)
+	if err != nil {
 		return Registry{}, err
 	}
 	return store.Registry, nil
@@ -203,7 +209,7 @@ func Rotate(home string, now time.Time) (Registry, error) {
 	}
 	defer release()
 	path := storePath(home)
-	store, err := loadStore(path)
+	store, err := loadOrMigrateStoreUnlocked(home)
 	if err != nil {
 		return Registry{}, err
 	}
@@ -263,7 +269,7 @@ func Revoke(home, keyIDValue string, now time.Time) (Registry, error) {
 	}
 	defer release()
 	path := storePath(home)
-	store, err := loadStore(path)
+	store, err := loadOrMigrateStoreUnlocked(home)
 	if err != nil {
 		return Registry{}, err
 	}
@@ -336,7 +342,7 @@ func SignWithRegistry(home string, input SignInput, now time.Time) (DetachedSign
 	}
 	defer release()
 
-	store, err := loadStore(storePath(home))
+	store, err := loadOrMigrateStoreUnlocked(home)
 	if err != nil {
 		return DetachedSignature{}, Registry{}, err
 	}
@@ -748,7 +754,7 @@ func loadStore(path string) (privateStore, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return privateStore{}, errors.New("audit trust store is not initialized")
+			return privateStore{}, fmt.Errorf("audit trust store is not initialized: %w", os.ErrNotExist)
 		}
 		return privateStore{}, fmt.Errorf("inspect audit trust store: %w", err)
 	}
@@ -772,6 +778,79 @@ func loadStore(path string) (privateStore, error) {
 	return store, nil
 }
 
+func loadOrMigrateStoreUnlocked(home string) (privateStore, error) {
+	protectedPath := storePath(home)
+	store, err := loadStore(protectedPath)
+	if err == nil {
+		if err := validatePrivateStore(store); err != nil {
+			return privateStore{}, err
+		}
+		if err := cleanupEquivalentLegacyStore(home, store); err != nil {
+			return privateStore{}, err
+		}
+		return store, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return privateStore{}, err
+	}
+
+	legacy, legacyErr := loadLegacyStore(legacyStorePath(home))
+	if legacyErr != nil {
+		return privateStore{}, legacyErr
+	}
+	if err := validatePrivateStore(legacy); err != nil {
+		return privateStore{}, fmt.Errorf("validate legacy audit trust store: %w", err)
+	}
+	if err := saveStore(protectedPath, legacy); err != nil {
+		return privateStore{}, fmt.Errorf("migrate audit trust store to protected v2: %w", err)
+	}
+	if err := cleanupEquivalentLegacyStore(home, legacy); err != nil {
+		return privateStore{}, err
+	}
+	return legacy, nil
+}
+
+func loadLegacyStore(path string) (privateStore, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return privateStore{}, fmt.Errorf("audit trust store is not initialized: %w", os.ErrNotExist)
+		}
+		return privateStore{}, fmt.Errorf("inspect legacy audit trust store: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return privateStore{}, errors.New("legacy audit trust store must be a regular file")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return privateStore{}, fmt.Errorf("read legacy audit trust store: %w", err)
+	}
+	defer clear(data)
+	var store privateStore
+	if err := json.Unmarshal(data, &store); err != nil {
+		return privateStore{}, fmt.Errorf("decode legacy audit trust store: %w", err)
+	}
+	return store, nil
+}
+
+func cleanupEquivalentLegacyStore(home string, protected privateStore) error {
+	path := legacyStorePath(home)
+	legacy, err := loadLegacyStore(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !reflect.DeepEqual(legacy, protected) {
+		return errors.New("legacy audit trust store does not match protected store; refusing to remove it")
+	}
+	if err := os.Remove(path); err != nil {
+		return fmt.Errorf("remove migrated legacy audit trust store: %w", err)
+	}
+	return nil
+}
+
 func acquireStoreLock(home string) (func(), error) {
 	home = strings.TrimSpace(home)
 	if home == "" {
@@ -787,6 +866,10 @@ func acquireStoreLock(home string) (func(), error) {
 }
 
 func storePath(home string) string {
+	return filepath.Join(home, "audit-trust", "private-v2.dat")
+}
+
+func legacyStorePath(home string) string {
 	return filepath.Join(home, "audit-trust", "private-v1.json")
 }
 

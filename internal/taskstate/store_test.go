@@ -71,8 +71,9 @@ func TestTaskLifecyclePersistsLiveProgress(t *testing.T) {
 		Status:            FinalReviewPass,
 		Summary:           "all checks passed",
 		VerifiedFacts:     []string{"health endpoint returned 200"},
-		IntentSpec:        func() *OutcomeAxis { a, _ := passingOutcomeAxes(); return a }(),
-		EngineeringPolicy: func() *OutcomeAxis { _, a := passingOutcomeAxes(); return a }(),
+		VerifiedEvidence:  []ReviewEvidenceBinding{reviewBinding("health endpoint returned 200", "verify", nil, nil)},
+		IntentSpec:        func() *OutcomeAxis { a, _ := passingBoundAxes("verify", nil); return a }(),
+		EngineeringPolicy: func() *OutcomeAxis { _, a := passingBoundAxes("verify", nil); return a }(),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -255,7 +256,7 @@ func TestBlockAndResumeUsesOneSummary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	task, err := store.Create("Repair", "repair service", []string{"service works"}, nil, nil)
+	task, err := store.Create("Repair", "repair service", []string{"service works"}, []TaskStepInput{{ID: "resume", Title: "Verify resumed service"}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,8 +274,11 @@ func TestBlockAndResumeUsesOneSummary(t *testing.T) {
 	if task.Status != StatusActive || task.Blocker != "" || task.Summary != "network restored" {
 		t.Fatalf("unexpected resumed state: %#v", task)
 	}
-	intent, policy := passingOutcomeAxes()
-	task, err = store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewPass, Summary: "ready to close", VerifiedFacts: []string{"network restored"}, IntentSpec: intent, EngineeringPolicy: policy})
+	if _, err := store.Checkpoint(task.ID, "resume", StepCompleted, "resumed service verified"); err != nil {
+		t.Fatal(err)
+	}
+	intent, policy := passingBoundAxes("resume", nil)
+	task, err = store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewPass, Summary: "ready to close", VerifiedFacts: []string{"network restored"}, VerifiedEvidence: []ReviewEvidenceBinding{reviewBinding("network restored", "resume", nil, nil)}, IntentSpec: intent, EngineeringPolicy: policy})
 	if err != nil {
 		t.Fatal(err)
 	}

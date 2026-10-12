@@ -11,17 +11,27 @@ func TestTwoAxisOutcomeReviewGate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	task, err := store.Create("Review", "deliver outcome", []string{"implemented"}, nil, nil)
+	task, err := store.Create("Review", "deliver outcome", []string{"implemented"}, []TaskStepInput{{ID: "review", Title: "Review outcome"}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := store.Checkpoint(task.ID, "review", StepCompleted, "outcome checked"); err != nil {
+		t.Fatal(err)
+	}
 	axis := func(status string, evidence, findings []string) *OutcomeAxis {
-		return &OutcomeAxis{Status: status, Evidence: evidence, Findings: findings}
+		out := &OutcomeAxis{Status: status, Evidence: evidence, Findings: findings}
+		if status == FinalReviewPass {
+			for _, claim := range evidence {
+				out.EvidenceBindings = append(out.EvidenceBindings, reviewBinding(claim, "review", nil, nil))
+			}
+		}
+		return out
 	}
 	pass := func() FinalReviewInput {
 		return FinalReviewInput{
 			Status: FinalReviewPass, Summary: "verified",
 			VerifiedFacts:     []string{"test passed"},
+			VerifiedEvidence:  []ReviewEvidenceBinding{reviewBinding("test passed", "review", nil, nil)},
 			IntentSpec:        axis(FinalReviewPass, []string{"acceptance check passed"}, nil),
 			EngineeringPolicy: axis(FinalReviewPass, []string{"security check passed"}, nil),
 		}

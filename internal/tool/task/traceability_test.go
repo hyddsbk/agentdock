@@ -51,9 +51,27 @@ func TestTaskManageTraceabilityLifecycle(t *testing.T) {
 
 	reviewed, err := rt.manageTest(context.Background(), map[string]any{
 		"action": "final_review", "task_id": taskID, "status": "pass", "summary": "covered",
-		"verified":           []string{"R1 covered"},
-		"intent_spec":        map[string]any{"status": "pass", "evidence": []string{"traceability coverage complete"}},
-		"engineering_policy": map[string]any{"status": "pass", "evidence": []string{"tests pass"}},
+		"verified": []string{"R1 covered"},
+		"verified_evidence": []map[string]any{{
+			"claim": "R1 covered", "step_id": "build",
+			"requirement_refs": []string{"spec://feature#R1"},
+			"evidence_refs":    []string{"commit://agentdock/abc123"},
+		}},
+		"intent_spec": map[string]any{
+			"status": "pass", "evidence": []string{"traceability coverage complete"},
+			"evidence_bindings": []map[string]any{{
+				"claim": "traceability coverage complete", "step_id": "build",
+				"requirement_refs": []string{"spec://feature#R1"},
+				"evidence_refs":    []string{"commit://agentdock/abc123"},
+			}},
+		},
+		"engineering_policy": map[string]any{
+			"status": "pass", "evidence": []string{"tests pass"},
+			"evidence_bindings": []map[string]any{{
+				"claim": "tests pass", "step_id": "build",
+				"evidence_refs": []string{"test://task/TestR1"},
+			}},
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +86,7 @@ func TestTaskManageTraceabilityLifecycle(t *testing.T) {
 func TestTaskManageSchemaPublishesTraceabilityFields(t *testing.T) {
 	schema := ManageInputSchema(config.Config{})
 	props := schema["properties"].(map[string]any)
-	for _, key := range []string{"requirement_refs", "execution_evidence"} {
+	for _, key := range []string{"requirement_refs", "execution_evidence", "verified_evidence"} {
 		if _, ok := props[key]; !ok {
 			t.Fatalf("task_manage schema missing %s", key)
 		}
@@ -78,5 +96,10 @@ func TestTaskManageSchemaPublishesTraceabilityFields(t *testing.T) {
 	stepProps := items["properties"].(map[string]any)
 	if _, ok := stepProps["requirement_refs"]; !ok {
 		t.Fatal("task_manage step schema missing requirement_refs")
+	}
+	axis := props["intent_spec"].(map[string]any)
+	axisProps := axis["properties"].(map[string]any)
+	if _, ok := axisProps["evidence_bindings"]; !ok {
+		t.Fatal("task_manage outcome axis schema missing evidence_bindings")
 	}
 }

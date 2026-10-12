@@ -85,11 +85,22 @@ func TestTraceableCheckpointRequiresExecutionEvidenceAndFinalReviewReportsCovera
 		t.Fatalf("R2 checkpoint: %v", err)
 	}
 
-	intent, policy := passingOutcomeAxes()
+	intent := &OutcomeAxis{
+		Status: FinalReviewPass, Evidence: []string{"R1 intent covered"},
+		EvidenceBindings: []ReviewEvidenceBinding{reviewBinding("R1 intent covered", "build", []string{"spec://feature#R1"}, []string{"commit://agentdock/abc123"})},
+	}
+	policy := &OutcomeAxis{
+		Status: FinalReviewPass, Evidence: []string{"R2 verification passed"},
+		EvidenceBindings: []ReviewEvidenceBinding{reviewBinding("R2 verification passed", "verify", []string{"spec://feature#R2"}, []string{"test://integration/TestR2"})},
+	}
 	reviewed, err := store.FinalReview(task.ID, FinalReviewInput{
 		Status: FinalReviewPass, Summary: "spec coverage verified",
 		VerifiedFacts: []string{"R1 and R2 have implementation evidence"},
-		IntentSpec:    intent, EngineeringPolicy: policy,
+		VerifiedEvidence: []ReviewEvidenceBinding{
+			reviewBinding("R1 and R2 have implementation evidence", "build", []string{"spec://feature#R1"}, []string{"commit://agentdock/abc123"}),
+			reviewBinding("R1 and R2 have implementation evidence", "verify", []string{"spec://feature#R2"}, []string{"test://integration/TestR2"}),
+		},
+		IntentSpec: intent, EngineeringPolicy: policy,
 	})
 	if err != nil {
 		t.Fatal(err)

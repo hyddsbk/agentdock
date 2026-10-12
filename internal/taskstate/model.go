@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	SchemaVersion             = 9
+	SchemaVersion             = 10
 	legacySchemaVersion       = 1
 	dependencySchemaVersion   = 2
 	contextSchemaVersion      = 3
@@ -15,6 +15,7 @@ const (
 	handoffSchemaVersion      = 6
 	traceabilitySchemaVersion = 7
 	tddSchemaVersion          = 8
+	executionSchemaVersion    = 9
 	FinalReviewPass           = "pass"
 	FinalReviewFailed         = "failed"
 
@@ -57,9 +58,35 @@ type Condition struct {
 }
 
 type OutcomeAxis struct {
-	Status   string   `json:"status"`
-	Evidence []string `json:"evidence,omitempty"`
-	Findings []string `json:"findings,omitempty"`
+	Status           string                  `json:"status"`
+	Evidence         []string                `json:"evidence,omitempty"`
+	EvidenceBindings []ReviewEvidenceBinding `json:"evidence_bindings,omitempty"`
+	Findings         []string                `json:"findings,omitempty"`
+}
+
+// ReviewEvidenceBinding makes a human-readable review claim accountable to
+// evidence already owned by one completed Task step. RequirementRefs and
+// EvidenceRefs are references only; their ownership is validated server-side.
+type ReviewEvidenceBinding struct {
+	Claim           string   `json:"claim"`
+	StepID          string   `json:"step_id"`
+	RequirementRefs []string `json:"requirement_refs,omitempty"`
+	EvidenceRefs    []string `json:"evidence_refs,omitempty"`
+}
+
+type OutcomeProvenanceBinding struct {
+	Scope           string   `json:"scope"`
+	Claim           string   `json:"claim"`
+	StepID          string   `json:"step_id"`
+	RequirementRefs []string `json:"requirement_refs,omitempty"`
+	EvidenceRefs    []string `json:"evidence_refs,omitempty"`
+}
+
+type OutcomeProvenance struct {
+	Bindings        []OutcomeProvenanceBinding `json:"bindings"`
+	StepIDs         []string                   `json:"step_ids,omitempty"`
+	RequirementRefs []string                   `json:"requirement_refs,omitempty"`
+	EvidenceRefs    []string                   `json:"evidence_refs,omitempty"`
 }
 
 type Handoff struct {
@@ -71,13 +98,14 @@ type Handoff struct {
 }
 
 type FinalReviewInput struct {
-	Status            string       `json:"status"`
-	Summary           string       `json:"summary"`
-	VerifiedFacts     []string     `json:"verified_facts,omitempty"`
-	OpenRisks         []string     `json:"open_risks,omitempty"`
-	MissingChecks     []string     `json:"missing_checks,omitempty"`
-	IntentSpec        *OutcomeAxis `json:"intent_spec,omitempty"`
-	EngineeringPolicy *OutcomeAxis `json:"engineering_policy,omitempty"`
+	Status            string                  `json:"status"`
+	Summary           string                  `json:"summary"`
+	VerifiedFacts     []string                `json:"verified_facts,omitempty"`
+	VerifiedEvidence  []ReviewEvidenceBinding `json:"verified_evidence,omitempty"`
+	OpenRisks         []string                `json:"open_risks,omitempty"`
+	MissingChecks     []string                `json:"missing_checks,omitempty"`
+	IntentSpec        *OutcomeAxis            `json:"intent_spec,omitempty"`
+	EngineeringPolicy *OutcomeAxis            `json:"engineering_policy,omitempty"`
 }
 
 type FinalReview struct {
@@ -89,6 +117,7 @@ type FinalReview struct {
 	IntentSpec        *OutcomeAxis          `json:"intent_spec,omitempty"`
 	EngineeringPolicy *OutcomeAxis          `json:"engineering_policy,omitempty"`
 	Traceability      *TraceabilityCoverage `json:"traceability,omitempty"`
+	Provenance        *OutcomeProvenance    `json:"provenance,omitempty"`
 	ReviewRevision    string                `json:"review_revision"`
 	ReviewedAt        time.Time             `json:"reviewed_at"`
 }

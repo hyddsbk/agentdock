@@ -361,6 +361,7 @@ func applyFinalReview(task *Task, input FinalReviewInput, now time.Time) error {
 		return errors.New("final review requires both intent_spec and engineering_policy outcome axes")
 	}
 	traceability := buildTraceabilityCoverage(*task)
+	var provenance *OutcomeProvenance
 	if status == FinalReviewPass {
 		if intentSpec.Status != FinalReviewPass || engineeringPolicy.Status != FinalReviewPass {
 			return errors.New("passing final review requires both outcome axes to pass")
@@ -372,6 +373,10 @@ func applyFinalReview(task *Task, input FinalReviewInput, now time.Time) error {
 			return fmt.Errorf("passing final review requires all task steps completed: %s", strings.Join(pending, ", "))
 		}
 		if err := requireCompleteTraceability(traceability); err != nil {
+			return err
+		}
+		provenance, err = buildOutcomeProvenance(*task, verifiedFacts, input.VerifiedEvidence, intentSpec, engineeringPolicy)
+		if err != nil {
 			return err
 		}
 	} else {
@@ -388,7 +393,7 @@ func applyFinalReview(task *Task, input FinalReviewInput, now time.Time) error {
 		return err
 	}
 	clearHandoff(task)
-	task.FinalReview = &FinalReview{Status: status, Summary: summary, VerifiedFacts: verifiedFacts, OpenRisks: openRisks, MissingChecks: missingChecks, IntentSpec: intentSpec, EngineeringPolicy: engineeringPolicy, Traceability: traceability, ReviewRevision: reviewRevision, ReviewedAt: now}
+	task.FinalReview = &FinalReview{Status: status, Summary: summary, VerifiedFacts: verifiedFacts, OpenRisks: openRisks, MissingChecks: missingChecks, IntentSpec: intentSpec, EngineeringPolicy: engineeringPolicy, Traceability: traceability, Provenance: provenance, ReviewRevision: reviewRevision, ReviewedAt: now}
 	task.EvolutionCandidates = nil
 	if status == FinalReviewPass {
 		task.Phase = PhaseCloseout
@@ -408,6 +413,14 @@ func normalizeOutcomeAxis(label string, input *OutcomeAxis) (*OutcomeAxis, error
 	}
 	evidence := normalizeReviewItems(input.Evidence)
 	findings := normalizeReviewItems(input.Findings)
+	bindings := make([]ReviewEvidenceBinding, 0, len(input.EvidenceBindings))
+	for i, binding := range input.EvidenceBindings {
+		normalized, err := normalizeReviewEvidenceBinding(label, i, binding)
+		if err != nil {
+			return nil, err
+		}
+		bindings = append(bindings, normalized)
+	}
 	for _, item := range append(append([]string{}, evidence...), findings...) {
 		if err := validateTextLimit("final review "+label+" item", item, maxTaskReviewItemBytes); err != nil {
 			return nil, err
@@ -419,7 +432,7 @@ func normalizeOutcomeAxis(label string, input *OutcomeAxis) (*OutcomeAxis, error
 	if status == FinalReviewFailed && len(findings) == 0 {
 		return nil, fmt.Errorf("failed %s requires at least one finding", label)
 	}
-	return &OutcomeAxis{Status: status, Evidence: evidence, Findings: findings}, nil
+	return &OutcomeAxis{Status: status, Evidence: evidence, EvidenceBindings: bindings, Findings: findings}, nil
 }
 
 func completeTask(task *Task, summary string, now time.Time, emitEvent bool) error {

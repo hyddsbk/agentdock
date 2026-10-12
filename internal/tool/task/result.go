@@ -61,6 +61,9 @@ func compactTaskSummary(task taskstate.Task) map[string]any {
 		if step.ExecutionEvidence != nil {
 			item["execution_evidence"] = step.ExecutionEvidence
 		}
+		if refs := taskstate.OutcomeEvidenceRefs(step); len(refs) > 0 {
+			item["outcome_evidence_refs"] = refs
+		}
 		if step.Quality != nil {
 			item["quality"] = step.Quality
 		}
@@ -138,6 +141,9 @@ func compactTaskSummary(task taskstate.Task) map[string]any {
 		if task.FinalReview.Traceability != nil {
 			review["traceability"] = task.FinalReview.Traceability
 		}
+		if task.FinalReview.Provenance != nil {
+			review["provenance"] = task.FinalReview.Provenance
+		}
 		summary["final_review"] = review
 	}
 	if task.CompletedAt != nil {
@@ -183,6 +189,9 @@ func compactResumeContext(task taskstate.Task) map[string]any {
 		}
 		if step.ExecutionEvidence != nil {
 			item["execution_evidence"] = step.ExecutionEvidence
+		}
+		if refs := taskstate.OutcomeEvidenceRefs(step); len(refs) > 0 {
+			item["outcome_evidence_refs"] = refs
 		}
 		if step.Quality != nil {
 			item["quality"] = step.Quality

@@ -94,6 +94,7 @@ func TestTaskFinalReviewAutomaticallyResolvesPreboundLearningCheck(t *testing.T)
 	created, err := runtime.Call(t.Context(), "task_manage", map[string]any{
 		"action": "create", "title": "验证自动解析", "goal": "验证预绑定经验", "project": "agentdock",
 		"completion_conditions": []string{"有真实结果"},
+		"steps":                 []map[string]any{{"id": "observe", "title": "观察真实结果"}},
 		"learning_checks": []map[string]any{{
 			"evolution_id": evolutionID, "on_success": "support", "on_failure": "contradict",
 		}},
@@ -102,10 +103,16 @@ func TestTaskFinalReviewAutomaticallyResolvesPreboundLearningCheck(t *testing.T)
 		t.Fatal(err)
 	}
 	taskID := created["task_id"].(string)
+	if _, err := runtime.Call(t.Context(), "task_manage", map[string]any{
+		"action": "checkpoint", "task_id": taskID, "step_id": "observe", "status": "completed", "summary": "真实结果已观察",
+	}); err != nil {
+		t.Fatal(err)
+	}
 	final, err := runtime.Call(t.Context(), "task_manage", map[string]any{
 		"action": "final_review", "task_id": taskID, "status": "pass", "summary": "真实验证通过",
-		"intent_spec": map[string]any{"status": "pass", "evidence": []string{"acceptance check"}}, "engineering_policy": map[string]any{"status": "pass", "evidence": []string{"technical check"}},
-		"verified": []string{"目标行为真实发生"},
+		"intent_spec":        map[string]any{"status": "pass", "evidence": []string{"acceptance check"}, "evidence_bindings": []map[string]any{{"claim": "acceptance check", "step_id": "observe"}}},
+		"engineering_policy": map[string]any{"status": "pass", "evidence": []string{"technical check"}, "evidence_bindings": []map[string]any{{"claim": "technical check", "step_id": "observe"}}},
+		"verified":           []string{"目标行为真实发生"}, "verified_evidence": []map[string]any{{"claim": "目标行为真实发生", "step_id": "observe"}},
 	})
 	if err != nil {
 		t.Fatal(err)

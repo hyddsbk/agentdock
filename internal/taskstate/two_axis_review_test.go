@@ -23,11 +23,26 @@ func TestFinalReviewRequiresBothOutcomeAxes(t *testing.T) {
 
 func TestFinalReviewPersistsBothOutcomeAxes(t *testing.T) {
 	store, _ := New(t.TempDir())
-	task, err := store.Create("review", "verify two axes", []string{"done"}, nil, nil)
+	task, err := store.Create("review", "verify two axes", []string{"done"}, []TaskStepInput{{ID: "review", Title: "Review"}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	task, err = store.FinalReview(task.ID, FinalReviewInput{Status: FinalReviewPass, Summary: "verified", VerifiedFacts: []string{"fact"}, IntentSpec: &OutcomeAxis{Status: FinalReviewPass, Evidence: []string{"intent"}}, EngineeringPolicy: &OutcomeAxis{Status: FinalReviewPass, Evidence: []string{"policy"}}})
+	if _, err := store.Checkpoint(task.ID, "review", StepCompleted, "checked"); err != nil {
+		t.Fatal(err)
+	}
+	task, err = store.FinalReview(task.ID, FinalReviewInput{
+		Status: FinalReviewPass, Summary: "verified",
+		VerifiedFacts:    []string{"fact"},
+		VerifiedEvidence: []ReviewEvidenceBinding{reviewBinding("fact", "review", nil, nil)},
+		IntentSpec: &OutcomeAxis{
+			Status: FinalReviewPass, Evidence: []string{"intent"},
+			EvidenceBindings: []ReviewEvidenceBinding{reviewBinding("intent", "review", nil, nil)},
+		},
+		EngineeringPolicy: &OutcomeAxis{
+			Status: FinalReviewPass, Evidence: []string{"policy"},
+			EvidenceBindings: []ReviewEvidenceBinding{reviewBinding("policy", "review", nil, nil)},
+		},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

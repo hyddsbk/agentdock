@@ -86,7 +86,7 @@ func reviewedTask(t *testing.T, tasks *taskstate.Store, fact string) taskstate.T
 
 func newLearningTask(t *testing.T, tasks *taskstate.Store) taskstate.Task {
 	t.Helper()
-	task, err := tasks.CreateWithContext("验证经验", "验证一条经验", "agentdock", "", []string{"有真实结果"}, nil, nil)
+	task, err := tasks.CreateWithContext("验证经验", "验证一条经验", "agentdock", "", []string{"有真实结果"}, []taskstate.TaskStepInput{{ID: "observe", Title: "观察真实结果"}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,34 @@ func bindLearningCheck(t *testing.T, service *Service, task taskstate.Task, evol
 
 func passLearningTask(t *testing.T, tasks *taskstate.Store, task taskstate.Task, fact string) taskstate.Task {
 	t.Helper()
-	updated, err := tasks.FinalReview(task.ID, taskstate.FinalReviewInput{Status: taskstate.FinalReviewPass, Summary: "验证完成", VerifiedFacts: []string{fact}, IntentSpec: &taskstate.OutcomeAxis{Status: "pass", Evidence: []string{fact}}, EngineeringPolicy: &taskstate.OutcomeAxis{Status: "pass", Evidence: []string{"policy checks verified"}}})
+	stepID := ""
+	for _, step := range task.Steps {
+		stepID = step.ID
+		if step.Status != taskstate.StepCompleted {
+			var err error
+			task, err = tasks.Checkpoint(task.ID, step.ID, taskstate.StepCompleted, "真实结果已观察")
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		break
+	}
+	if stepID == "" {
+		t.Fatal("learning task requires one completed step for P6 final-review provenance")
+	}
+	updated, err := tasks.FinalReview(task.ID, taskstate.FinalReviewInput{
+		Status: taskstate.FinalReviewPass, Summary: "验证完成",
+		VerifiedFacts:    []string{fact},
+		VerifiedEvidence: []taskstate.ReviewEvidenceBinding{{Claim: fact, StepID: stepID}},
+		IntentSpec: &taskstate.OutcomeAxis{
+			Status: "pass", Evidence: []string{fact},
+			EvidenceBindings: []taskstate.ReviewEvidenceBinding{{Claim: fact, StepID: stepID}},
+		},
+		EngineeringPolicy: &taskstate.OutcomeAxis{
+			Status: "pass", Evidence: []string{"policy checks verified"},
+			EvidenceBindings: []taskstate.ReviewEvidenceBinding{{Claim: "policy checks verified", StepID: stepID}},
+		},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,6 +142,16 @@ func passLearningTask(t *testing.T, tasks *taskstate.Store, task taskstate.Task,
 
 func failLearningTask(t *testing.T, tasks *taskstate.Store, task taskstate.Task, risk string) taskstate.Task {
 	t.Helper()
+	for _, step := range task.Steps {
+		if step.Status != taskstate.StepCompleted {
+			var err error
+			task, err = tasks.Checkpoint(task.ID, step.ID, taskstate.StepCompleted, "真实结果已观察")
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		break
+	}
 	updated, err := tasks.FinalReview(task.ID, taskstate.FinalReviewInput{Status: taskstate.FinalReviewFailed, Summary: "验证失败", OpenRisks: []string{risk}, IntentSpec: &taskstate.OutcomeAxis{Status: "failed", Findings: []string{risk}}, EngineeringPolicy: &taskstate.OutcomeAxis{Status: "pass", Evidence: []string{"policy verified"}}})
 	if err != nil {
 		t.Fatal(err)
@@ -288,11 +325,15 @@ func TestSameTaskCannotVoteAgainAfterFinalReviewRevisionChanges(t *testing.T) {
 	}
 	id := proposed.Record.EvolutionID
 
-	task, err := tasks.CreateWithContext("一次执行", "验证一次独立执行", "agentdock", "", []string{"完成验证"}, nil, nil)
+	task, err := tasks.CreateWithContext("一次执行", "验证一次独立执行", "agentdock", "", []string{"完成验证"}, []taskstate.TaskStepInput{{ID: "observe", Title: "观察真实结果"}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	bindLearningCheck(t, service, task, id, RelationSupport, RelationContradict)
+	task, err = tasks.Checkpoint(task.ID, "observe", taskstate.StepCompleted, "真实结果已观察")
+	if err != nil {
+		t.Fatal(err)
+	}
 	task, err = tasks.FinalReview(task.ID, taskstate.FinalReviewInput{Status: taskstate.FinalReviewFailed, Summary: "第一次评审发现反例", OpenRisks: []string{"真实结果与经验矛盾"}, IntentSpec: &taskstate.OutcomeAxis{Status: "failed", Findings: []string{"review finding"}}, EngineeringPolicy: &taskstate.OutcomeAxis{Status: "pass", Evidence: []string{"policy verified"}}})
 	if err != nil {
 		t.Fatal(err)
@@ -302,7 +343,19 @@ func TestSameTaskCannotVoteAgainAfterFinalReviewRevisionChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	task, err = tasks.FinalReview(task.ID, taskstate.FinalReviewInput{Status: taskstate.FinalReviewPass, Summary: "同一执行重新评审为通过", VerifiedFacts: []string{"同一执行现在被解释为支持"}, IntentSpec: &taskstate.OutcomeAxis{Status: "pass", Evidence: []string{"acceptance verified"}}, EngineeringPolicy: &taskstate.OutcomeAxis{Status: "pass", Evidence: []string{"policy verified"}}})
+	task, err = tasks.FinalReview(task.ID, taskstate.FinalReviewInput{
+		Status: taskstate.FinalReviewPass, Summary: "同一执行重新评审为通过",
+		VerifiedFacts:    []string{"同一执行现在被解释为支持"},
+		VerifiedEvidence: []taskstate.ReviewEvidenceBinding{{Claim: "同一执行现在被解释为支持", StepID: "observe"}},
+		IntentSpec: &taskstate.OutcomeAxis{
+			Status: "pass", Evidence: []string{"acceptance verified"},
+			EvidenceBindings: []taskstate.ReviewEvidenceBinding{{Claim: "acceptance verified", StepID: "observe"}},
+		},
+		EngineeringPolicy: &taskstate.OutcomeAxis{
+			Status: "pass", Evidence: []string{"policy verified"},
+			EvidenceBindings: []taskstate.ReviewEvidenceBinding{{Claim: "policy verified", StepID: "observe"}},
+		},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -592,7 +645,7 @@ func TestBlindedCreateTimeValidationCanPromoteActiveToVerified(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	blind, err := tasks.CreateWithContext("验证经验", "验证一条经验", "agentdock", "", []string{"有真实结果"}, nil, nil, bindings...)
+	blind, err := tasks.CreateWithContext("验证经验", "验证一条经验", "agentdock", "", []string{"有真实结果"}, []taskstate.TaskStepInput{{ID: "observe", Title: "观察真实结果"}}, nil, bindings...)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -40,6 +40,7 @@ type taskManageInput struct {
 	Diagnostic           *taskstate.DiagnosticEvidence
 	ExecutionEvidence    *taskstate.ExecutionEvidence
 	Verified             []string
+	VerifiedEvidence     []taskstate.ReviewEvidenceBinding
 	Risks                []string
 	IntentSpec           *taskstate.OutcomeAxis
 	EngineeringPolicy    *taskstate.OutcomeAxis
@@ -114,6 +115,7 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 		Diagnostic:           request.Diagnostic,
 		ExecutionEvidence:    executionEvidence,
 		Verified:             append([]string(nil), request.Verified...),
+		VerifiedEvidence:     append([]taskstate.ReviewEvidenceBinding(nil), request.VerifiedEvidence...),
 		Risks:                append([]string(nil), request.Risks...),
 		IntentSpec:           request.IntentSpec,
 		EngineeringPolicy:    request.EngineeringPolicy,
@@ -139,6 +141,9 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 	}
 	if len(input.RequirementRefs) > 0 && input.Action != "create" {
 		return input, toolErrorDetails("VALIDATION_ERROR", "top-level requirement_refs are only valid for create", "validation", map[string]any{"field": "requirement_refs", "action": input.Action})
+	}
+	if len(input.VerifiedEvidence) > 0 && input.Action != "final_review" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "verified_evidence is only valid for final_review", "validation", map[string]any{"field": "verified_evidence", "action": input.Action})
 	}
 	if (strings.TrimSpace(input.NextStepID) != "" || len(input.ContextRefs) > 0) && input.Action != "handoff" {
 		return input, toolErrorDetails("VALIDATION_ERROR", "next_step_id and top-level context_refs are only valid for handoff", "validation", map[string]any{"action": input.Action})
@@ -323,7 +328,7 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 	case "handoff":
 		task, err = s.tasks.Handoff(input.TaskID, input.NextStepID, input.Summary, input.ContextRefs, input.Risks)
 	case "final_review":
-		review := taskstate.FinalReviewInput{Status: input.Status, Summary: input.Summary, VerifiedFacts: input.Verified, OpenRisks: input.Risks, IntentSpec: input.IntentSpec, EngineeringPolicy: input.EngineeringPolicy}
+		review := taskstate.FinalReviewInput{Status: input.Status, Summary: input.Summary, VerifiedFacts: input.Verified, VerifiedEvidence: input.VerifiedEvidence, OpenRisks: input.Risks, IntentSpec: input.IntentSpec, EngineeringPolicy: input.EngineeringPolicy}
 		task, err = s.tasks.FinalReview(input.TaskID, review)
 		if err == nil {
 			warnings := make([]string, 0, 2)

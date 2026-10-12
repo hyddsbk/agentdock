@@ -38,34 +38,35 @@ type ExecutionReceiptRequest struct {
 // ManageRequest 只表达 task_manage 对模型公开的输入字段。
 // 持久化状态中的 phase、bound_at 等内部字段在规范化阶段由 Task 域模型补齐，不能从边界注入。
 type ManageRequest struct {
-	Action               string                        `json:"action"`
-	Title                string                        `json:"title,omitempty"`
-	Goal                 string                        `json:"goal,omitempty"`
-	Project              string                        `json:"project,omitempty"`
-	Device               string                        `json:"device,omitempty"`
-	CompletionConditions []string                      `json:"completion_conditions,omitempty"`
-	RequirementRefs      []string                      `json:"requirement_refs,omitempty"`
-	Steps                []StepRequest                 `json:"steps,omitempty"`
-	TemplateID           string                        `json:"template_id,omitempty"`
-	SourceTemplateIDs    []string                      `json:"source_template_ids,omitempty"`
-	LearningChecks       []LearningCheckRequest        `json:"learning_checks,omitempty"`
-	Status               string                        `json:"status,omitempty"`
-	Limit                *int                          `json:"limit,omitempty"`
-	TaskID               string                        `json:"task_id,omitempty"`
-	StepID               string                        `json:"step_id,omitempty"`
-	TDDSeam              *TDDSeamRequest               `json:"tdd_seam,omitempty"`
-	CompletedStepIDs     *[]string                     `json:"completed_step_ids,omitempty"`
-	CurrentStepID        string                        `json:"current_step_id,omitempty"`
-	NextStepID           string                        `json:"next_step_id,omitempty"`
-	Summary              string                        `json:"summary,omitempty"`
-	ContextRefs          []string                      `json:"context_refs,omitempty"`
-	Diagnostic           *taskstate.DiagnosticEvidence `json:"diagnostic,omitempty"`
-	ExecutionEvidence    *ExecutionEvidenceRequest     `json:"execution_evidence,omitempty"`
-	ExecutionReceipts    []ExecutionReceiptRequest     `json:"execution_receipts,omitempty"`
-	Verified             []string                      `json:"verified,omitempty"`
-	Risks                []string                      `json:"risks,omitempty"`
-	IntentSpec           *taskstate.OutcomeAxis        `json:"intent_spec,omitempty"`
-	EngineeringPolicy    *taskstate.OutcomeAxis        `json:"engineering_policy,omitempty"`
+	Action               string                            `json:"action"`
+	Title                string                            `json:"title,omitempty"`
+	Goal                 string                            `json:"goal,omitempty"`
+	Project              string                            `json:"project,omitempty"`
+	Device               string                            `json:"device,omitempty"`
+	CompletionConditions []string                          `json:"completion_conditions,omitempty"`
+	RequirementRefs      []string                          `json:"requirement_refs,omitempty"`
+	Steps                []StepRequest                     `json:"steps,omitempty"`
+	TemplateID           string                            `json:"template_id,omitempty"`
+	SourceTemplateIDs    []string                          `json:"source_template_ids,omitempty"`
+	LearningChecks       []LearningCheckRequest            `json:"learning_checks,omitempty"`
+	Status               string                            `json:"status,omitempty"`
+	Limit                *int                              `json:"limit,omitempty"`
+	TaskID               string                            `json:"task_id,omitempty"`
+	StepID               string                            `json:"step_id,omitempty"`
+	TDDSeam              *TDDSeamRequest                   `json:"tdd_seam,omitempty"`
+	CompletedStepIDs     *[]string                         `json:"completed_step_ids,omitempty"`
+	CurrentStepID        string                            `json:"current_step_id,omitempty"`
+	NextStepID           string                            `json:"next_step_id,omitempty"`
+	Summary              string                            `json:"summary,omitempty"`
+	ContextRefs          []string                          `json:"context_refs,omitempty"`
+	Diagnostic           *taskstate.DiagnosticEvidence     `json:"diagnostic,omitempty"`
+	ExecutionEvidence    *ExecutionEvidenceRequest         `json:"execution_evidence,omitempty"`
+	ExecutionReceipts    []ExecutionReceiptRequest         `json:"execution_receipts,omitempty"`
+	Verified             []string                          `json:"verified,omitempty"`
+	VerifiedEvidence     []taskstate.ReviewEvidenceBinding `json:"verified_evidence,omitempty"`
+	Risks                []string                          `json:"risks,omitempty"`
+	IntentSpec           *taskstate.OutcomeAxis            `json:"intent_spec,omitempty"`
+	EngineeringPolicy    *taskstate.OutcomeAxis            `json:"engineering_policy,omitempty"`
 }
 
 // WorkflowRequest 是 workflow_template_manage 的强类型输入。

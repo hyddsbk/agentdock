@@ -39,7 +39,11 @@ func TestTaskManageLifecycleAndRestartRecovery(t *testing.T) {
 	}
 	if _, err := rt.manageTest(context.Background(), map[string]any{
 		"action": "final_review", "task_id": taskID, "status": "pass", "summary": "final verification passed",
-		"verified": []string{"health endpoint returned 200"}, "risks": []string{}, "intent_spec": map[string]any{"status": "pass", "evidence": []string{"acceptance verified"}}, "engineering_policy": map[string]any{"status": "pass", "evidence": []string{"technical checks passed"}},
+		"verified":           []string{"health endpoint returned 200"},
+		"verified_evidence":  []map[string]any{{"claim": "health endpoint returned 200", "step_id": "verify"}},
+		"risks":              []string{},
+		"intent_spec":        map[string]any{"status": "pass", "evidence": []string{"acceptance verified"}, "evidence_bindings": []map[string]any{{"claim": "acceptance verified", "step_id": "verify"}}},
+		"engineering_policy": map[string]any{"status": "pass", "evidence": []string{"technical checks passed"}, "evidence_bindings": []map[string]any{{"claim": "technical checks passed", "step_id": "verify"}}},
 	}); err != nil {
 		t.Fatal(err)
 	}

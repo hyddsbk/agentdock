@@ -30,6 +30,7 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 		"execution_evidence":    executionEvidenceSchema(),
 		"execution_receipts":    executionReceiptsInputSchema(),
 		"verified":              map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Facts verified during final_review. Required when status=pass."},
+		"verified_evidence":     reviewEvidenceBindingsSchema("Server-validated bindings for every verified fact in a passing final_review."),
 		"risks":                 map[string]any{"type": "array", "maxItems": 16, "items": map[string]any{"type": "string"}, "description": "Unresolved risks for handoff, or remaining risks for a failed final_review."},
 		"intent_spec":           outcomeAxisSchema("Intent/spec compliance outcome. Required for final_review."),
 		"engineering_policy":    outcomeAxisSchema("Engineering/policy compliance outcome. Required for final_review."),
@@ -138,9 +139,25 @@ func outcomeAxisSchema(description string) map[string]any {
 	return map[string]any{
 		"type": "object", "description": description, "additionalProperties": false, "required": []string{"status"},
 		"properties": map[string]any{
-			"status":   map[string]any{"type": "string", "enum": []string{"pass", "failed"}},
-			"evidence": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"findings": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"status":            map[string]any{"type": "string", "enum": []string{"pass", "failed"}},
+			"evidence":          map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"evidence_bindings": reviewEvidenceBindingsSchema("Server-validated bindings for every passing-axis evidence claim."),
+			"findings":          map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+		},
+	}
+}
+
+func reviewEvidenceBindingsSchema(description string) map[string]any {
+	return map[string]any{
+		"type": "array", "maxItems": 64, "description": description,
+		"items": map[string]any{
+			"type": "object", "additionalProperties": false, "required": []string{"claim", "step_id"},
+			"properties": map[string]any{
+				"claim":            map[string]any{"type": "string", "description": "Exact verified/evidence claim this binding proves."},
+				"step_id":          map[string]any{"type": "string", "description": "Completed task step that owns the cited outcome evidence."},
+				"requirement_refs": map[string]any{"type": "array", "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Requirement refs owned by this step and proven by this claim."},
+				"evidence_refs":    map[string]any{"type": "array", "maxItems": 16, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Evidence refs already owned by this completed step, including exec:// receipts, diagnostic:// step evidence, artifact://, commit://, test://, or other persisted execution refs."},
+			},
 		},
 	}
 }

@@ -63,8 +63,15 @@ func normalizeTaskSteps(values []TaskStepInput, now time.Time) ([]TaskStep, erro
 			}
 			seam = &TDDSeam{TestCommand: command, DeclaredAt: now}
 		}
+		executionContract, err := normalizeExecutionContract(id, value.ExecutionContract, now)
+		if err != nil {
+			return nil, err
+		}
+		if seam != nil && executionContract != nil {
+			return nil, fmt.Errorf("step %s cannot declare both tdd_test_command and execution_contract", id)
+		}
 		seen[id] = struct{}{}
-		steps = append(steps, TaskStep{TDD: seam, ID: id, Title: title, Phase: phase, DependsOn: dependsOn, CompletionConditions: completionConditions, ContextRefs: contextRefs, RequirementRefs: requirementRefs, Quality: quality, Status: StepPending, UpdatedAt: now})
+		steps = append(steps, TaskStep{TDD: seam, ExecutionContract: executionContract, ID: id, Title: title, Phase: phase, DependsOn: dependsOn, CompletionConditions: completionConditions, ContextRefs: contextRefs, RequirementRefs: requirementRefs, Quality: quality, Status: StepPending, UpdatedAt: now})
 	}
 	if err := validateTaskStepGraph(steps); err != nil {
 		return nil, err

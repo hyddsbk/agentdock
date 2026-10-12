@@ -78,6 +78,9 @@ func (s *Store) CheckpointWithEvidenceAndTDD(id, stepID, status, summary string,
 				return err
 			}
 		}
+		if status == StepCompleted && step.ExecutionContract != nil && executionEvidence == nil && step.ExecutionEvidence == nil {
+			return errors.New("declared execution contract requires executor evidence to complete")
+		}
 		if diagnostic != nil {
 			if status == StepPending {
 				return errors.New("diagnostic evidence can only be recorded on an in_progress or completed checkpoint")
@@ -116,6 +119,11 @@ func (s *Store) CheckpointWithEvidenceAndTDD(id, stepID, status, summary string,
 		if status == StepCompleted {
 			if tddEvidence != nil {
 				step.TDD = tddEvidence
+			}
+			if step.ExecutionContract != nil {
+				if err := step.ExecutionContract.ValidateCompletion(step.ExecutionEvidence); err != nil {
+					return err
+				}
 			}
 			if err := validateDiagnosticStepCompletion(task, step); err != nil {
 				return err
@@ -173,6 +181,9 @@ func (s *Store) BatchCheckpoint(id string, completedStepIDs []string, currentSte
 			}
 			if task.Steps[stepIndex].TDD != nil && task.Steps[stepIndex].Status != StepCompleted {
 				return fmt.Errorf("step %s requires single-step tdd evidence checkpoint", stepID)
+			}
+			if task.Steps[stepIndex].ExecutionContract != nil && task.Steps[stepIndex].Status != StepCompleted {
+				return fmt.Errorf("step %s requires single-step execution receipt checkpoint", stepID)
 			}
 			if !validStepTransition(task.Steps[stepIndex].Status, StepCompleted) {
 				return fmt.Errorf("cannot move step %s from %s to %s", stepID, task.Steps[stepIndex].Status, StepCompleted)

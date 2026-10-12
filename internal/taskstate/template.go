@@ -23,15 +23,16 @@ type StepQuality struct {
 }
 
 type TemplateStep struct {
-	ID                   string       `json:"id"`
-	Title                string       `json:"title"`
-	Phase                Phase        `json:"phase"`
-	DependsOn            []string     `json:"depends_on,omitempty"`
-	CompletionConditions []string     `json:"completion_conditions,omitempty"`
-	ContextRefs          []string     `json:"context_refs,omitempty"`
-	RequirementRefs      []string     `json:"requirement_refs,omitempty"`
-	Quality              *StepQuality `json:"quality,omitempty"`
-	TDDTestCommand       string       `json:"tdd_test_command,omitempty"`
+	ID                   string                 `json:"id"`
+	Title                string                 `json:"title"`
+	Phase                Phase                  `json:"phase"`
+	DependsOn            []string               `json:"depends_on,omitempty"`
+	CompletionConditions []string               `json:"completion_conditions,omitempty"`
+	ContextRefs          []string               `json:"context_refs,omitempty"`
+	RequirementRefs      []string               `json:"requirement_refs,omitempty"`
+	Quality              *StepQuality           `json:"quality,omitempty"`
+	TDDTestCommand       string                 `json:"tdd_test_command,omitempty"`
+	ExecutionContract    *ExecutionContractSpec `json:"execution_contract,omitempty"`
 }
 
 type Template struct {
@@ -75,15 +76,16 @@ type TemplateReference struct {
 }
 
 type TaskStepInput struct {
-	ID                   string       `json:"id"`
-	Title                string       `json:"title"`
-	Phase                Phase        `json:"phase,omitempty"`
-	DependsOn            []string     `json:"depends_on,omitempty"`
-	CompletionConditions []string     `json:"completion_conditions,omitempty"`
-	ContextRefs          []string     `json:"context_refs,omitempty"`
-	RequirementRefs      []string     `json:"requirement_refs,omitempty"`
-	Quality              *StepQuality `json:"quality,omitempty"`
-	TDDTestCommand       string       `json:"tdd_test_command,omitempty"`
+	ID                   string                 `json:"id"`
+	Title                string                 `json:"title"`
+	Phase                Phase                  `json:"phase,omitempty"`
+	DependsOn            []string               `json:"depends_on,omitempty"`
+	CompletionConditions []string               `json:"completion_conditions,omitempty"`
+	ContextRefs          []string               `json:"context_refs,omitempty"`
+	RequirementRefs      []string               `json:"requirement_refs,omitempty"`
+	Quality              *StepQuality           `json:"quality,omitempty"`
+	TDDTestCommand       string                 `json:"tdd_test_command,omitempty"`
+	ExecutionContract    *ExecutionContractSpec `json:"execution_contract,omitempty"`
 }
 
 const (
@@ -107,6 +109,7 @@ type DiagnosticEvidence struct {
 
 type TaskStep struct {
 	TDD                  *TDDSeam            `json:"tdd_seam,omitempty"`
+	ExecutionContract    *ExecutionContract  `json:"execution_contract,omitempty"`
 	ID                   string              `json:"id"`
 	Title                string              `json:"title"`
 	Phase                Phase               `json:"phase"`

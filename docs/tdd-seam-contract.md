@@ -94,8 +94,10 @@ gate. Template-originated work therefore cannot bypass P4.
 
 ## Task state schema compatibility
 
-P4 advances the Task state schema from v7 to **v8** because `TaskStep` now
-persists the optional TDD seam declaration and attested runs.
+P4 advanced the Task state schema from v7 to **v8** because `TaskStep` began
+persisting the optional TDD seam declaration and attested runs. P5 subsequently
+advances the current Task schema to v9 for generic execution contracts; v8
+remains a supported lazy-migration input.
 
 The reader accepts schema v1 through v8. Schema v1-v7 tasks are upgraded to v8
 in memory when loaded; no bulk rewrite is performed. A legacy task is persisted

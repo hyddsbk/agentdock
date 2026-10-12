@@ -30,6 +30,7 @@ type taskManageInput struct {
 	TaskID               string
 	StepID               string
 	TDDSeam              *TDDSeamRequest
+	ExecutionReceipts    []ExecutionReceiptRequest
 	CompletedStepIDs     []string
 	CompletedStepIDsSet  bool
 	CurrentStepID        string
@@ -72,7 +73,7 @@ type workflowTemplateMatchRequest struct {
 func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) {
 	steps := make([]taskstate.TaskStepInput, len(request.Steps))
 	for i, step := range request.Steps {
-		steps[i] = taskstate.TaskStepInput{ID: step.ID, Title: step.Title, DependsOn: step.DependsOn, CompletionConditions: step.CompletionConditions, ContextRefs: step.ContextRefs, RequirementRefs: step.RequirementRefs, Quality: step.Quality, TDDTestCommand: step.TDDTestCommand}
+		steps[i] = taskstate.TaskStepInput{ID: step.ID, Title: step.Title, DependsOn: step.DependsOn, CompletionConditions: step.CompletionConditions, ContextRefs: step.ContextRefs, RequirementRefs: step.RequirementRefs, Quality: step.Quality, TDDTestCommand: step.TDDTestCommand, ExecutionContract: step.ExecutionContract}
 	}
 	learningChecks := make([]taskstate.EvolutionBinding, len(request.LearningChecks))
 	for i, check := range request.LearningChecks {
@@ -81,6 +82,11 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 			OnSuccess:   check.OnSuccess,
 			OnFailure:   check.OnFailure,
 		}
+	}
+
+	var executionEvidence *taskstate.ExecutionEvidence
+	if request.ExecutionEvidence != nil {
+		executionEvidence = &taskstate.ExecutionEvidence{EvidenceRefs: append([]string(nil), request.ExecutionEvidence.EvidenceRefs...)}
 	}
 
 	input := taskManageInput{
@@ -100,12 +106,13 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 		TaskID:               request.TaskID,
 		StepID:               request.StepID,
 		TDDSeam:              request.TDDSeam,
+		ExecutionReceipts:    append([]ExecutionReceiptRequest(nil), request.ExecutionReceipts...),
 		CurrentStepID:        request.CurrentStepID,
 		NextStepID:           request.NextStepID,
 		Summary:              request.Summary,
 		ContextRefs:          append([]string(nil), request.ContextRefs...),
 		Diagnostic:           request.Diagnostic,
-		ExecutionEvidence:    request.ExecutionEvidence,
+		ExecutionEvidence:    executionEvidence,
 		Verified:             append([]string(nil), request.Verified...),
 		Risks:                append([]string(nil), request.Risks...),
 		IntentSpec:           request.IntentSpec,
@@ -123,6 +130,12 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 	}
 	if input.TDDSeam != nil && input.Action != "checkpoint" {
 		return input, toolErrorDetails("VALIDATION_ERROR", "tdd_seam is only valid for checkpoint", "validation", map[string]any{"field": "tdd_seam", "action": input.Action})
+	}
+	if len(input.ExecutionReceipts) > 0 && input.Action != "checkpoint" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "execution_receipts are only valid for checkpoint", "validation", map[string]any{"field": "execution_receipts", "action": input.Action})
+	}
+	if input.TDDSeam != nil && len(input.ExecutionReceipts) > 0 {
+		return input, toolErrorDetails("VALIDATION_ERROR", "tdd_seam and execution_receipts cannot be combined", "validation", nil)
 	}
 	if len(input.RequirementRefs) > 0 && input.Action != "create" {
 		return input, toolErrorDetails("VALIDATION_ERROR", "top-level requirement_refs are only valid for create", "validation", map[string]any{"field": "requirement_refs", "action": input.Action})
@@ -287,6 +300,9 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 			if input.TDDSeam != nil {
 				return nil, toolErrorDetails("VALIDATION_ERROR", "tdd_seam is only accepted by single-step checkpoint", "validation", map[string]any{"field": "tdd_seam"})
 			}
+			if len(input.ExecutionReceipts) > 0 {
+				return nil, toolErrorDetails("VALIDATION_ERROR", "execution_receipts are only accepted by single-step checkpoint", "validation", map[string]any{"field": "execution_receipts"})
+			}
 			if input.Diagnostic != nil {
 				return nil, toolErrorDetails("VALIDATION_ERROR", "diagnostic evidence is only accepted by single-step checkpoint", "validation", map[string]any{"field": "diagnostic"})
 			}
@@ -295,7 +311,7 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 			}
 			task, err = s.tasks.BatchCheckpoint(input.TaskID, input.CompletedStepIDs, input.CurrentStepID, input.Summary)
 		} else {
-			task, err = s.checkpointWithTDDReceipts(input.TaskID, input.StepID, input.Status, input.Summary, input.TDDSeam, input.Diagnostic, input.ExecutionEvidence)
+			task, err = s.checkpointWithReceiptEvidence(input.TaskID, input.StepID, input.Status, input.Summary, input.TDDSeam, input.ExecutionReceipts, input.Diagnostic, input.ExecutionEvidence)
 		}
 	case "block":
 		task, err = s.tasks.Block(input.TaskID, input.Summary)

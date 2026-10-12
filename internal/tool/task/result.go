@@ -55,6 +55,9 @@ func compactTaskSummary(task taskstate.Task) map[string]any {
 		if len(step.RequirementRefs) > 0 {
 			item["requirement_refs"] = append([]string(nil), step.RequirementRefs...)
 		}
+		if step.ExecutionContract != nil {
+			item["execution_contract"] = step.ExecutionContract
+		}
 		if step.ExecutionEvidence != nil {
 			item["execution_evidence"] = step.ExecutionEvidence
 		}
@@ -174,6 +177,9 @@ func compactResumeContext(task taskstate.Task) map[string]any {
 		}
 		if len(step.RequirementRefs) > 0 {
 			item["requirement_refs"] = append([]string(nil), step.RequirementRefs...)
+		}
+		if step.ExecutionContract != nil {
+			item["execution_contract"] = step.ExecutionContract
 		}
 		if step.ExecutionEvidence != nil {
 			item["execution_evidence"] = step.ExecutionEvidence

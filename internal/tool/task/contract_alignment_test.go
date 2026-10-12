@@ -13,7 +13,7 @@ func TestTaskManageSchemaExposesTwoAxisAndTDDContracts(t *testing.T) {
 		if !ok {
 			t.Fatalf("properties missing: %#v", schema)
 		}
-		for _, field := range []string{"intent_spec", "engineering_policy", "tdd_seam"} {
+		for _, field := range []string{"intent_spec", "engineering_policy", "tdd_seam", "execution_receipts"} {
 			if _, ok := props[field]; !ok {
 				t.Fatalf("task_manage schema missing %s with Nexus=%t", field, cfg.NexusEndpoint != "")
 			}
@@ -31,6 +31,13 @@ func TestTaskManageSchemaExposesTwoAxisAndTDDContracts(t *testing.T) {
 		stepProps := items["properties"].(map[string]any)
 		if _, ok := stepProps["tdd_test_command"]; !ok {
 			t.Fatalf("step schema missing tdd_test_command with Nexus=%t", cfg.NexusEndpoint != "")
+		}
+		if _, ok := stepProps["execution_contract"]; !ok {
+			t.Fatalf("step schema missing execution_contract with Nexus=%t", cfg.NexusEndpoint != "")
+		}
+		legacy := props["execution_evidence"].(map[string]any)["properties"].(map[string]any)
+		if _, injected := legacy["attestations"]; injected {
+			t.Fatalf("public legacy execution_evidence unexpectedly exposes attestations with Nexus=%t", cfg.NexusEndpoint != "")
 		}
 	}
 }

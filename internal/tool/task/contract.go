@@ -28,6 +28,7 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 		"summary":               stringProp("Current progress, blocker, resume, handoff orientation, or final review summary."),
 		"diagnostic":            diagnosticEvidenceSchema(),
 		"execution_evidence":    executionEvidenceSchema(),
+		"execution_receipts":    executionReceiptsInputSchema(),
 		"verified":              map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Facts verified during final_review. Required when status=pass."},
 		"risks":                 map[string]any{"type": "array", "maxItems": 16, "items": map[string]any{"type": "string"}, "description": "Unresolved risks for handoff, or remaining risks for a failed final_review."},
 		"intent_spec":           outcomeAxisSchema("Intent/spec compliance outcome. Required for final_review."),
@@ -39,7 +40,7 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 		props["device"] = stringProp("Optional device identifier stored with the task.")
 		props["steps"] = map[string]any{
 			"type": "array", "maxItems": 12, "description": "Concrete task steps.",
-			"items": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"id", "title"}, "properties": map[string]any{"id": stringProp("Stable step id."), "title": stringProp("Human-readable step title."), "tdd_test_command": stringProp("Optional TDD gate; completion requires executor-issued Red, Green, and Regression receipts for this frozen command."), "depends_on": map[string]any{"type": "array", "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Step ids that must be completed before this step can start or complete."}, "completion_conditions": map[string]any{"type": "array", "maxItems": 4, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Checkable conditions that define when this step is complete. Required on every step when any dependency edge is used."}, "context_refs": map[string]any{"type": "array", "maxItems": 8, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Compact references to authoritative context such as recall://, skill://, artifact://, issue, commit, or task output pointers; do not duplicate source content."}, "requirement_refs": map[string]any{"type": "array", "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Requirement/spec pointers implemented or verified by this step; each must exist in top-level requirement_refs."}, "quality": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"kind", "outcome"}, "properties": map[string]any{"kind": map[string]any{"type": "string", "enum": []string{"discovery", "vertical_slice", "wide_refactor_expand", "wide_refactor_migrate", "wide_refactor_contract", "verification", "release", "diagnostic_feedback_loop", "diagnostic_reproduction", "diagnostic_hypothesis", "diagnostic_validation", "diagnostic_regression"}}, "outcome": stringProp("Independently observable outcome delivered by this step."), "refactor_group": stringProp("Stable group id for expand-migrate-contract wide refactors."), "dependency_reasons": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}, "description": "One concise reason for every depends_on edge; keys must exactly match depends_on."}}}}},
+			"items": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"id", "title"}, "properties": map[string]any{"id": stringProp("Stable step id."), "title": stringProp("Human-readable step title."), "tdd_test_command": stringProp("Optional TDD gate; completion requires executor-issued Red, Green, and Regression receipts for this frozen command."), "execution_contract": executionContractInputSchema(), "depends_on": map[string]any{"type": "array", "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Step ids that must be completed before this step can start or complete."}, "completion_conditions": map[string]any{"type": "array", "maxItems": 4, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Checkable conditions that define when this step is complete. Required on every step when any dependency edge is used."}, "context_refs": map[string]any{"type": "array", "maxItems": 8, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Compact references to authoritative context such as recall://, skill://, artifact://, issue, commit, or task output pointers; do not duplicate source content."}, "requirement_refs": map[string]any{"type": "array", "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Requirement/spec pointers implemented or verified by this step; each must exist in top-level requirement_refs."}, "quality": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"kind", "outcome"}, "properties": map[string]any{"kind": map[string]any{"type": "string", "enum": []string{"discovery", "vertical_slice", "wide_refactor_expand", "wide_refactor_migrate", "wide_refactor_contract", "verification", "release", "diagnostic_feedback_loop", "diagnostic_reproduction", "diagnostic_hypothesis", "diagnostic_validation", "diagnostic_regression"}}, "outcome": stringProp("Independently observable outcome delivered by this step."), "refactor_group": stringProp("Stable group id for expand-migrate-contract wide refactors."), "dependency_reasons": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}, "description": "One concise reason for every depends_on edge; keys must exactly match depends_on."}}}}},
 		}
 		return taskManageInputObject(props)
 	}
@@ -48,7 +49,7 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 	props["device"] = stringProp("Optional device identifier used to hard-scope device-specific Evolution guidance and evidence candidates.")
 	props["steps"] = map[string]any{
 		"type": "array", "maxItems": 12, "description": "Concrete task steps. Required when composing multiple source templates.",
-		"items": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"id", "title"}, "properties": map[string]any{"id": stringProp("Stable step id."), "title": stringProp("Human-readable step title."), "tdd_test_command": stringProp("Optional TDD gate; completion requires executor-issued Red, Green, and Regression receipts for this frozen command."), "depends_on": map[string]any{"type": "array", "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Step ids that must be completed before this step can start or complete."}, "completion_conditions": map[string]any{"type": "array", "maxItems": 4, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Checkable conditions that define when this step is complete. Required on every step when any dependency edge is used."}, "context_refs": map[string]any{"type": "array", "maxItems": 8, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Compact references to authoritative context such as recall://, skill://, artifact://, issue, commit, or task output pointers; do not duplicate source content."}, "requirement_refs": map[string]any{"type": "array", "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Requirement/spec pointers implemented or verified by this step; each must exist in top-level requirement_refs."}, "quality": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"kind", "outcome"}, "properties": map[string]any{"kind": map[string]any{"type": "string", "enum": []string{"discovery", "vertical_slice", "wide_refactor_expand", "wide_refactor_migrate", "wide_refactor_contract", "verification", "release", "diagnostic_feedback_loop", "diagnostic_reproduction", "diagnostic_hypothesis", "diagnostic_validation", "diagnostic_regression"}}, "outcome": stringProp("Independently observable outcome delivered by this step."), "refactor_group": stringProp("Stable group id for expand-migrate-contract wide refactors."), "dependency_reasons": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}, "description": "One concise reason for every depends_on edge; keys must exactly match depends_on."}}}}},
+		"items": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"id", "title"}, "properties": map[string]any{"id": stringProp("Stable step id."), "title": stringProp("Human-readable step title."), "tdd_test_command": stringProp("Optional TDD gate; completion requires executor-issued Red, Green, and Regression receipts for this frozen command."), "execution_contract": executionContractInputSchema(), "depends_on": map[string]any{"type": "array", "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Step ids that must be completed before this step can start or complete."}, "completion_conditions": map[string]any{"type": "array", "maxItems": 4, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Checkable conditions that define when this step is complete. Required on every step when any dependency edge is used."}, "context_refs": map[string]any{"type": "array", "maxItems": 8, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Compact references to authoritative context such as recall://, skill://, artifact://, issue, commit, or task output pointers; do not duplicate source content."}, "requirement_refs": map[string]any{"type": "array", "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Requirement/spec pointers implemented or verified by this step; each must exist in top-level requirement_refs."}, "quality": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"kind", "outcome"}, "properties": map[string]any{"kind": map[string]any{"type": "string", "enum": []string{"discovery", "vertical_slice", "wide_refactor_expand", "wide_refactor_migrate", "wide_refactor_contract", "verification", "release", "diagnostic_feedback_loop", "diagnostic_reproduction", "diagnostic_hypothesis", "diagnostic_validation", "diagnostic_regression"}}, "outcome": stringProp("Independently observable outcome delivered by this step."), "refactor_group": stringProp("Stable group id for expand-migrate-contract wide refactors."), "dependency_reasons": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}, "description": "One concise reason for every depends_on edge; keys must exactly match depends_on."}}}}},
 	}
 	props["template_id"] = stringProp("Single active workflow template to apply. Its current active version is resolved automatically.")
 	props["source_template_ids"] = map[string]any{"type": "array", "minItems": 2, "maxItems": 3, "items": map[string]any{"type": "string"}, "description": "Two or three templates already composed by the model into steps and completion_conditions."}
@@ -90,6 +91,45 @@ func executionEvidenceSchema() map[string]any {
 		"required": []string{"evidence_refs"},
 		"properties": map[string]any{
 			"evidence_refs": map[string]any{"type": "array", "minItems": 1, "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Pointers such as commit://, test://, artifact://, issue://, or receipt:// that prove the mapped requirements were implemented or verified."},
+		},
+	}
+}
+
+func executionReceiptsInputSchema() map[string]any {
+	return map[string]any{
+		"type": "array", "minItems": 1, "maxItems": 8,
+		"description": "Executor-issued receipt references for a step with a declared execution_contract. Each check_id must map exactly once to the frozen check.",
+		"items": map[string]any{
+			"type": "object", "additionalProperties": false, "required": []string{"check_id", "ref"},
+			"properties": map[string]any{
+				"check_id": map[string]any{"type": "string"},
+				"ref":      map[string]any{"type": "string", "description": "exec:// receipt reference returned by exec_command."},
+			},
+		},
+	}
+}
+
+func executionContractInputSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "additionalProperties": false, "required": []string{"checks"},
+		"description": "Optional generic executor-attested completion gate. Unlike TDD, each check has one frozen command and allowed terminal exit codes.",
+		"properties": map[string]any{
+			"ordered": map[string]any{"type": "boolean", "description": "When true, checks must execute in declared order with no overlap."},
+			"checks": map[string]any{
+				"type": "array", "minItems": 1, "maxItems": 8,
+				"items": map[string]any{
+					"type": "object", "additionalProperties": false, "required": []string{"id", "command"},
+					"properties": map[string]any{
+						"id":      map[string]any{"type": "string"},
+						"command": map[string]any{"type": "string"},
+						"allowed_exit_codes": map[string]any{
+							"type": "array", "maxItems": 8, "uniqueItems": true,
+							"items":       map[string]any{"type": "integer"},
+							"description": "Acceptable exit codes. Omit to require exit code 0.",
+						},
+					},
+				},
+			},
 		},
 	}
 }

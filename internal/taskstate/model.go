@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	SchemaVersion             = 8
+	SchemaVersion             = 9
 	legacySchemaVersion       = 1
 	dependencySchemaVersion   = 2
 	contextSchemaVersion      = 3
@@ -14,6 +14,7 @@ const (
 	diagnosticSchemaVersion   = 5
 	handoffSchemaVersion      = 6
 	traceabilitySchemaVersion = 7
+	tddSchemaVersion          = 8
 	FinalReviewPass           = "pass"
 	FinalReviewFailed         = "failed"
 

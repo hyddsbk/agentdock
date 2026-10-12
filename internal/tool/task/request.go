@@ -3,14 +3,15 @@ package task
 import "github.com/uvwt/agentdock/internal/taskstate"
 
 type StepRequest struct {
-	ID                   string                 `json:"id"`
-	Title                string                 `json:"title"`
-	DependsOn            []string               `json:"depends_on,omitempty"`
-	CompletionConditions []string               `json:"completion_conditions,omitempty"`
-	ContextRefs          []string               `json:"context_refs,omitempty"`
-	RequirementRefs      []string               `json:"requirement_refs,omitempty"`
-	Quality              *taskstate.StepQuality `json:"quality,omitempty"`
-	TDDTestCommand       string                 `json:"tdd_test_command,omitempty"`
+	ID                   string                           `json:"id"`
+	Title                string                           `json:"title"`
+	DependsOn            []string                         `json:"depends_on,omitempty"`
+	CompletionConditions []string                         `json:"completion_conditions,omitempty"`
+	ContextRefs          []string                         `json:"context_refs,omitempty"`
+	RequirementRefs      []string                         `json:"requirement_refs,omitempty"`
+	Quality              *taskstate.StepQuality           `json:"quality,omitempty"`
+	TDDTestCommand       string                           `json:"tdd_test_command,omitempty"`
+	ExecutionContract    *taskstate.ExecutionContractSpec `json:"execution_contract,omitempty"`
 }
 
 type LearningCheckRequest struct {
@@ -23,6 +24,15 @@ type TDDSeamRequest struct {
 	RedRef        string `json:"red_ref"`
 	GreenRef      string `json:"green_ref"`
 	RegressionRef string `json:"regression_ref"`
+}
+
+type ExecutionEvidenceRequest struct {
+	EvidenceRefs []string `json:"evidence_refs"`
+}
+
+type ExecutionReceiptRequest struct {
+	CheckID string `json:"check_id"`
+	Ref     string `json:"ref"`
 }
 
 // ManageRequest 只表达 task_manage 对模型公开的输入字段。
@@ -50,7 +60,8 @@ type ManageRequest struct {
 	Summary              string                        `json:"summary,omitempty"`
 	ContextRefs          []string                      `json:"context_refs,omitempty"`
 	Diagnostic           *taskstate.DiagnosticEvidence `json:"diagnostic,omitempty"`
-	ExecutionEvidence    *taskstate.ExecutionEvidence  `json:"execution_evidence,omitempty"`
+	ExecutionEvidence    *ExecutionEvidenceRequest     `json:"execution_evidence,omitempty"`
+	ExecutionReceipts    []ExecutionReceiptRequest     `json:"execution_receipts,omitempty"`
 	Verified             []string                      `json:"verified,omitempty"`
 	Risks                []string                      `json:"risks,omitempty"`
 	IntentSpec           *taskstate.OutcomeAxis        `json:"intent_spec,omitempty"`

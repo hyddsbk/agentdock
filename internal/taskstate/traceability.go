@@ -15,7 +15,8 @@ const (
 )
 
 type ExecutionEvidence struct {
-	EvidenceRefs []string `json:"evidence_refs"`
+	EvidenceRefs []string        `json:"evidence_refs,omitempty"`
+	Attestations []*ExecutionRun `json:"attestations,omitempty"`
 }
 
 type RequirementCoverage struct {
@@ -86,8 +87,8 @@ func normalizeExecutionEvidence(stepID string, input *ExecutionEvidence) (*Execu
 	if input == nil {
 		return nil, nil
 	}
-	if len(input.EvidenceRefs) == 0 {
-		return nil, fmt.Errorf("step %s execution evidence requires at least one evidence ref", stepID)
+	if len(input.EvidenceRefs) == 0 && len(input.Attestations) == 0 {
+		return nil, fmt.Errorf("step %s execution evidence requires at least one evidence ref or attestation", stepID)
 	}
 	if len(input.EvidenceRefs) > maxExecutionEvidenceRefs {
 		return nil, fmt.Errorf("step %s execution evidence refs cannot exceed %d", stepID, maxExecutionEvidenceRefs)
@@ -105,7 +106,15 @@ func normalizeExecutionEvidence(stepID string, input *ExecutionEvidence) (*Execu
 		seen[ref] = struct{}{}
 		refs = append(refs, ref)
 	}
-	return &ExecutionEvidence{EvidenceRefs: refs}, nil
+	attestations := make([]*ExecutionRun, 0, len(input.Attestations))
+	for _, run := range input.Attestations {
+		if err := validateExecutionRunIntegrity(run); err != nil {
+			return nil, fmt.Errorf("step %s has invalid execution attestation: %w", stepID, err)
+		}
+		copyRun := *run
+		attestations = append(attestations, &copyRun)
+	}
+	return &ExecutionEvidence{EvidenceRefs: refs, Attestations: attestations}, nil
 }
 
 func validateTraceableStepCompletion(step *TaskStep) error {

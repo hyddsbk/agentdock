@@ -17,7 +17,7 @@ func TestExecIssuesDurableExecutionReceipt(t *testing.T) {
 	service.receipts = receipts
 
 	result, err := service.execArgs(context.Background(), map[string]any{
-		"cmd":            "printf receipt-test",
+		"cmd":            "echo receipt-test",
 		"execution_mode": "sync",
 	})
 	if err != nil {
@@ -38,7 +38,7 @@ func TestExecIssuesDurableExecutionReceipt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if receipt.Command != "printf receipt-test" || receipt.ExitCode != 0 || receipt.Status != "exited" {
+	if receipt.Command != "echo receipt-test" || receipt.ExitCode != 0 || receipt.Status != "exited" {
 		t.Fatalf("unexpected receipt: %#v", receipt)
 	}
 	if receipt.StdoutSHA256 == "" || receipt.ReceiptSHA256 == "" || receipt.StartedAt.IsZero() || receipt.FinishedAt.IsZero() {

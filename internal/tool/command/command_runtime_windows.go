@@ -26,6 +26,7 @@ func (svc *Service) prepareCommandInvocation(request ExecRequest) (commandInvoca
 			return commandInvocation{}, err
 		}
 		invocation.execution = session.ExecutionContext{
+			Command: strings.TrimSpace(request.Cmd),
 			Runtime: "windows",
 			Workdir: invocation.workdir,
 		}
@@ -61,6 +62,7 @@ func (svc *Service) prepareCommandInvocation(request ExecRequest) (commandInvoca
 		return commandInvocation{
 			build: newWSLCommandFactory(wslPath, wslArgs, buildWSLProcessEnv(hostEnv, linuxEnv), svc.ws.DefaultCWD()),
 			execution: session.ExecutionContext{
+				Command:      strings.TrimSpace(request.Cmd),
 				Runtime:      "wsl",
 				Distribution: distribution,
 				Workdir:      workdir,

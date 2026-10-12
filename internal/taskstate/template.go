@@ -31,6 +31,7 @@ type TemplateStep struct {
 	ContextRefs          []string     `json:"context_refs,omitempty"`
 	RequirementRefs      []string     `json:"requirement_refs,omitempty"`
 	Quality              *StepQuality `json:"quality,omitempty"`
+	TDDTestCommand       string       `json:"tdd_test_command,omitempty"`
 }
 
 type Template struct {
@@ -82,6 +83,7 @@ type TaskStepInput struct {
 	ContextRefs          []string     `json:"context_refs,omitempty"`
 	RequirementRefs      []string     `json:"requirement_refs,omitempty"`
 	Quality              *StepQuality `json:"quality,omitempty"`
+	TDDTestCommand       string       `json:"tdd_test_command,omitempty"`
 }
 
 const (
@@ -104,6 +106,7 @@ type DiagnosticEvidence struct {
 }
 
 type TaskStep struct {
+	TDD                  *TDDSeam            `json:"tdd_seam,omitempty"`
 	ID                   string              `json:"id"`
 	Title                string              `json:"title"`
 	Phase                Phase               `json:"phase"`

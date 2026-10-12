@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/uvwt/agentdock/internal/config"
+	"github.com/uvwt/agentdock/internal/execevidence"
 	"github.com/uvwt/agentdock/internal/taskstate"
 )
 
@@ -20,6 +21,7 @@ type Service struct {
 	config    ConfigProvider
 	tasks     *taskstate.Store
 	evolution EvolutionProvider
+	receipts  *execevidence.Store
 }
 
 func New(configProvider ConfigProvider, tasks *taskstate.Store, evolution ...EvolutionProvider) *Service {
@@ -28,4 +30,9 @@ func New(configProvider ConfigProvider, tasks *taskstate.Store, evolution ...Evo
 		service.evolution = evolution[0]
 	}
 	return service
+}
+
+func (s *Service) WithExecutionEvidence(store *execevidence.Store) *Service {
+	s.receipts = store
+	return s
 }

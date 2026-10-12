@@ -53,7 +53,15 @@ func (svc *Service) newHostCommandInvocation(request ExecRequest) (commandInvoca
 	if err != nil {
 		return commandInvocation{}, err
 	}
-	return commandInvocation{command: request.Cmd, workdir: workdir, env: commandEnv}, nil
+	return commandInvocation{
+		command: request.Cmd,
+		workdir: workdir,
+		env:     commandEnv,
+		execution: session.ExecutionContext{
+			Command: strings.TrimSpace(request.Cmd),
+			Workdir: workdir,
+		},
+	}, nil
 }
 
 func parseCommandSkillContext(request ExecRequest) (commandSkillContext, error) {

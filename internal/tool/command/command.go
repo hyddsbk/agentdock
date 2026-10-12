@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/uvwt/agentdock/internal/execevidence"
 	"github.com/uvwt/agentdock/internal/tool/command/session"
 )
 
@@ -141,7 +142,8 @@ func (svc *Service) Exec(ctx context.Context, request ExecRequest) (Result, erro
 
 	err = s.WaitError()
 	s.Cancel()
-	result := snapshotResult(s.Snapshot("exited", maxBytes))
+	snapshot := s.Snapshot("exited", maxBytes)
+	result := svc.snapshotResultWithReceipt(snapshot)
 	result["sandbox"] = preparationStatusResult(sandboxStatus)
 	if s.TimedOut {
 		result["status"] = "timeout"
@@ -220,6 +222,39 @@ func snapshotResult(snapshot session.Snapshot) Result {
 	return result
 }
 
+func (svc *Service) snapshotResultWithReceipt(snapshot session.Snapshot) Result {
+	result := snapshotResult(snapshot)
+	if !snapshot.Completed || svc.receipts == nil {
+		return result
+	}
+	ref, err := svc.receipts.Issue(execevidence.Receipt{
+		Issuer:       execevidence.ExecutorIssuer,
+		SessionID:    snapshot.SessionID,
+		Command:      snapshot.Command,
+		ExitCode:     snapshot.ExitCode,
+		Status:       snapshot.Status,
+		TimedOut:     snapshot.TimedOut,
+		StartedAt:    snapshot.StartedAt,
+		FinishedAt:   snapshot.FinishedAt,
+		Runtime:      snapshot.Runtime,
+		Workdir:      snapshot.Workdir,
+		StdoutSHA256: snapshot.StdoutSHA256,
+		StderrSHA256: snapshot.StderrSHA256,
+	})
+	if err != nil {
+		result["execution_receipt_error"] = err.Error()
+		return result
+	}
+	result["execution_receipt"] = map[string]any{
+		"ref":            ref,
+		"issuer":         execevidence.ExecutorIssuer,
+		"command_sha256": execevidence.CommandSHA256(snapshot.Command),
+		"started_at":     snapshot.StartedAt,
+		"finished_at":    snapshot.FinishedAt,
+	}
+	return result
+}
+
 func preparationStatusResult(status session.PreparationStatus) map[string]any {
 	result := map[string]any{"enabled": status.Enabled}
 	if status.Mode != "" {
@@ -270,7 +305,7 @@ func (svc *Service) consumeCompletedSession(s *session.Session, maxBytes int) Re
 	err := s.WaitError()
 	s.Cancel()
 	svc.sessions.Delete(s.ID)
-	result := snapshotResult(s.Snapshot("exited", maxBytes))
+	result := svc.snapshotResultWithReceipt(s.Snapshot("exited", maxBytes))
 	if s.TimedOut {
 		result["status"] = "timeout"
 	}
@@ -309,7 +344,7 @@ func (svc *Service) killSession(request SessionActRequest) (Result, error) {
 		)
 	}
 	svc.sessions.Delete(s.ID)
-	result := snapshotResult(s.Snapshot("killed", commandOutputLimit(request.MaxOutputBytes)))
+	result := svc.snapshotResultWithReceipt(s.Snapshot("killed", commandOutputLimit(request.MaxOutputBytes)))
 	if err := s.WaitError(); err != nil {
 		result["command_error"] = err.Error()
 	}

@@ -10,12 +10,19 @@ type StepRequest struct {
 	ContextRefs          []string               `json:"context_refs,omitempty"`
 	RequirementRefs      []string               `json:"requirement_refs,omitempty"`
 	Quality              *taskstate.StepQuality `json:"quality,omitempty"`
+	TDDTestCommand       string                 `json:"tdd_test_command,omitempty"`
 }
 
 type LearningCheckRequest struct {
 	EvolutionID string `json:"evolution_id"`
 	OnSuccess   string `json:"on_success"`
 	OnFailure   string `json:"on_failure"`
+}
+
+type TDDSeamRequest struct {
+	RedRef        string `json:"red_ref"`
+	GreenRef      string `json:"green_ref"`
+	RegressionRef string `json:"regression_ref"`
 }
 
 // ManageRequest 只表达 task_manage 对模型公开的输入字段。
@@ -36,6 +43,7 @@ type ManageRequest struct {
 	Limit                *int                          `json:"limit,omitempty"`
 	TaskID               string                        `json:"task_id,omitempty"`
 	StepID               string                        `json:"step_id,omitempty"`
+	TDDSeam              *TDDSeamRequest               `json:"tdd_seam,omitempty"`
 	CompletedStepIDs     *[]string                     `json:"completed_step_ids,omitempty"`
 	CurrentStepID        string                        `json:"current_step_id,omitempty"`
 	NextStepID           string                        `json:"next_step_id,omitempty"`

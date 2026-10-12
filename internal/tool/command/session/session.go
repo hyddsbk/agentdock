@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"hash"
 	"io"
 	"os/exec"
 	"sort"
@@ -28,6 +30,7 @@ type PrepareFunc func(*exec.Cmd) (func(), PreparationStatus)
 type CommandFactory func(context.Context) *exec.Cmd
 
 type ExecutionContext struct {
+	Command      string
 	Runtime      string
 	Distribution string
 	Workdir      string
@@ -61,13 +64,20 @@ type Session struct {
 	stderrDroppedBytes int
 	stdoutCursor       int
 	stderrCursor       int
+	stdoutHash         hash.Hash
+	stderrHash         hash.Hash
 }
 
 type Snapshot struct {
 	SessionID          string
 	Status             string
+	Command            string
 	Stdout             string
 	Stderr             string
+	StartedAt          time.Time
+	FinishedAt         time.Time
+	StdoutSHA256       string
+	StderrSHA256       string
 	ElapsedMS          int64
 	TimedOut           bool
 	Terminal           string
@@ -413,7 +423,7 @@ func StartCommandWithTTY(ctx context.Context, build CommandFactory, timeout time
 	s := &Session{
 		ID: id, Command: cmd, Cancel: cancel,
 		StartedAt: time.Now(), Done: make(chan struct{}), exitCode: -1,
-		Terminal: "pipes",
+		Terminal: "pipes", stdoutHash: sha256.New(), stderrHash: sha256.New(),
 	}
 	stdout := sessionOutputWriter{session: s}
 	stderr := sessionOutputWriter{session: s, stderr: true}
@@ -531,7 +541,9 @@ func (s *Session) snapshot(status string, maxBytes int, advance bool) Snapshot {
 	stdout := trim(stdoutSegment, maxBytes)
 	stderr := trim(stderrSegment, maxBytes)
 	return Snapshot{
-		SessionID: s.ID, Status: status, Stdout: stdout, Stderr: stderr,
+		SessionID: s.ID, Status: status, Command: s.execution.Command, Stdout: stdout, Stderr: stderr,
+		StartedAt: s.StartedAt, FinishedAt: s.FinishedAt,
+		StdoutSHA256: hashDigest(s.stdoutHash, []byte(stdoutFull)), StderrSHA256: hashDigest(s.stderrHash, []byte(stderrFull)),
 		ElapsedMS: time.Since(s.StartedAt).Milliseconds(), TimedOut: s.TimedOut, Terminal: s.Terminal,
 		StdoutOutputBytes: len([]byte(stdout)), StderrOutputBytes: len([]byte(stderr)),
 		StdoutTotalBytes: s.stdoutTotalBytes, StderrTotalBytes: s.stderrTotalBytes,
@@ -556,9 +568,15 @@ func (w sessionOutputWriter) Write(data []byte) (int, error) {
 	defer s.mu.Unlock()
 
 	dst := &s.stdout
+	digest := &s.stdoutHash
 	if w.stderr {
 		dst = &s.stderr
+		digest = &s.stderrHash
 	}
+	if *digest == nil {
+		*digest = sha256.New()
+	}
+	_, _ = (*digest).Write(data)
 	n, err := dst.Write(data)
 	if w.stderr {
 		s.stderrTotalBytes += n
@@ -572,6 +590,14 @@ func (w sessionOutputWriter) Write(data []byte) (int, error) {
 		s.stdoutCursor = adjustCursorAfterDrop(s.stdoutCursor, dropped)
 	}
 	return n, err
+}
+
+func hashDigest(value hash.Hash, fallback []byte) string {
+	if value != nil {
+		return hex.EncodeToString(value.Sum(nil))
+	}
+	sum := sha256.Sum256(fallback)
+	return hex.EncodeToString(sum[:])
 }
 
 func trim(value string, maxBytes int) string {

@@ -19,6 +19,14 @@ func (s *Store) Checkpoint(id, stepID, status, summary string, diagnostics ...*D
 }
 
 func (s *Store) CheckpointWithEvidence(id, stepID, status, summary string, diagnostic *DiagnosticEvidence, executionEvidence *ExecutionEvidence) (Task, error) {
+	return s.CheckpointWithEvidenceAndTDD(id, stepID, status, summary, diagnostic, executionEvidence, nil)
+}
+
+func (s *Store) CheckpointWithTDD(id, stepID, status, summary string, evidence *TDDSeam) (Task, error) {
+	return s.CheckpointWithEvidenceAndTDD(id, stepID, status, summary, nil, nil, evidence)
+}
+
+func (s *Store) CheckpointWithEvidenceAndTDD(id, stepID, status, summary string, diagnostic *DiagnosticEvidence, executionEvidence *ExecutionEvidence, tddEvidence *TDDSeam) (Task, error) {
 	return s.mutate(id, func(task *Task, now time.Time) error {
 		if err := requireActive(task); err != nil {
 			return err
@@ -50,6 +58,26 @@ func (s *Store) CheckpointWithEvidence(id, stepID, status, summary string, diagn
 			return fmt.Errorf("task step %s not found", stepID)
 		}
 		step := &task.Steps[stepIndex]
+		if tddEvidence != nil && status != StepCompleted {
+			return errors.New("tdd evidence requires completed checkpoint status")
+		}
+		if tddEvidence != nil && step.TDD == nil {
+			return errors.New("tdd evidence supplied for step without declared seam")
+		}
+		if status == StepCompleted && step.TDD != nil {
+			if tddEvidence == nil {
+				return errors.New("declared tdd seam requires evidence to complete")
+			}
+			if tddEvidence.TestCommand != step.TDD.TestCommand {
+				return errors.New("tdd test command differs from declared seam")
+			}
+			if !tddEvidence.DeclaredAt.Equal(step.TDD.DeclaredAt) {
+				return errors.New("tdd seam declaration timestamp differs from declared seam")
+			}
+			if err := tddEvidence.ValidateCompletion(); err != nil {
+				return err
+			}
+		}
 		if diagnostic != nil {
 			if status == StepPending {
 				return errors.New("diagnostic evidence can only be recorded on an in_progress or completed checkpoint")
@@ -74,7 +102,7 @@ func (s *Store) CheckpointWithEvidence(id, stepID, status, summary string, diagn
 			}
 			step.ExecutionEvidence = normalized
 		}
-		if step.Status == status && task.Summary == summary && diagnostic == nil && executionEvidence == nil {
+		if step.Status == status && task.Summary == summary && diagnostic == nil && executionEvidence == nil && tddEvidence == nil {
 			return nil
 		}
 		if !validStepTransition(step.Status, status) {
@@ -86,6 +114,9 @@ func (s *Store) CheckpointWithEvidence(id, stepID, status, summary string, diagn
 			}
 		}
 		if status == StepCompleted {
+			if tddEvidence != nil {
+				step.TDD = tddEvidence
+			}
 			if err := validateDiagnosticStepCompletion(task, step); err != nil {
 				return err
 			}
@@ -139,6 +170,9 @@ func (s *Store) BatchCheckpoint(id string, completedStepIDs []string, currentSte
 			stepIndex, ok := stepIndexes[stepID]
 			if !ok {
 				return fmt.Errorf("task step %s not found", stepID)
+			}
+			if task.Steps[stepIndex].TDD != nil && task.Steps[stepIndex].Status != StepCompleted {
+				return fmt.Errorf("step %s requires single-step tdd evidence checkpoint", stepID)
 			}
 			if !validStepTransition(task.Steps[stepIndex].Status, StepCompleted) {
 				return fmt.Errorf("cannot move step %s from %s to %s", stepID, task.Steps[stepIndex].Status, StepCompleted)

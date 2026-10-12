@@ -5,6 +5,7 @@ import (
 
 	"github.com/uvwt/agentdock/internal/config"
 	"github.com/uvwt/agentdock/internal/envstore"
+	"github.com/uvwt/agentdock/internal/execevidence"
 	"github.com/uvwt/agentdock/internal/tool/command/session"
 	"github.com/uvwt/agentdock/internal/workspace"
 )
@@ -18,15 +19,20 @@ type Service struct {
 	ws             *workspace.Workspace
 	envs           *envstore.Store
 	sessions       *session.Store
+	receipts       *execevidence.Store
 	resolveSkill   SkillResolver
 	commandContext CommandContext
 }
 
-func New(configProvider ConfigProvider, ws *workspace.Workspace, envs *envstore.Store, resolveSkill SkillResolver, commandContext CommandContext) *Service {
-	return &Service{
+func New(configProvider ConfigProvider, ws *workspace.Workspace, envs *envstore.Store, resolveSkill SkillResolver, commandContext CommandContext, receiptStores ...*execevidence.Store) *Service {
+	service := &Service{
 		config: configProvider, ws: ws, envs: envs, sessions: session.NewStore(),
 		resolveSkill: resolveSkill, commandContext: commandContext,
 	}
+	if len(receiptStores) > 0 {
+		service.receipts = receiptStores[0]
+	}
+	return service
 }
 
 func (s *Service) CommandEnv(skillName string, extra map[string]string) ([]string, error) {

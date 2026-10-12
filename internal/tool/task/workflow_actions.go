@@ -192,7 +192,7 @@ func normalizeTemplateIDs(ids []string) []string {
 func taskStepInputsFromTemplate(template taskstate.Template) []taskstate.TaskStepInput {
 	steps := make([]taskstate.TaskStepInput, 0, len(template.Steps))
 	for _, step := range template.Steps {
-		steps = append(steps, taskstate.TaskStepInput{ID: step.ID, Title: step.Title, Phase: step.Phase, DependsOn: step.DependsOn, CompletionConditions: step.CompletionConditions, ContextRefs: step.ContextRefs, RequirementRefs: step.RequirementRefs, Quality: step.Quality})
+		steps = append(steps, taskstate.TaskStepInput{ID: step.ID, Title: step.Title, Phase: step.Phase, DependsOn: step.DependsOn, CompletionConditions: step.CompletionConditions, ContextRefs: step.ContextRefs, RequirementRefs: step.RequirementRefs, Quality: step.Quality, TDDTestCommand: step.TDDTestCommand})
 	}
 	return steps
 }

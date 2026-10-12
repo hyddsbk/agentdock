@@ -13,6 +13,7 @@ import (
 	"github.com/uvwt/agentdock/internal/config"
 	"github.com/uvwt/agentdock/internal/envstore"
 	"github.com/uvwt/agentdock/internal/evolution"
+	"github.com/uvwt/agentdock/internal/execevidence"
 	mcpclient "github.com/uvwt/agentdock/internal/mcp/client"
 	"github.com/uvwt/agentdock/internal/taskstate"
 	toolacp "github.com/uvwt/agentdock/internal/tool/acp"
@@ -80,13 +81,18 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 		_ = mcpClients.Close()
 		return nil, err
 	}
+	executionReceipts, err := execevidence.New(filepath.Join(cfg.AgentDockHome, "execution-receipts"))
+	if err != nil {
+		_ = mcpClients.Close()
+		return nil, fmt.Errorf("initialize execution evidence: %w", err)
+	}
 	commandCtx, commandCancel := context.WithCancel(context.Background())
 	runtime := &Runtime{
 		cfg: cfg, ws: ws, skills: skills,
 		toolNames: toolNames, toolValidators: toolValidators,
 		commandCtx: commandCtx, commandCancel: commandCancel,
 	}
-	runtime.command = toolcommand.New(func() config.Config { return runtime.cfg }, ws, envs, skills.ResolveActive, runtime.commandExecutionContext)
+	runtime.command = toolcommand.New(func() config.Config { return runtime.cfg }, ws, envs, skills.ResolveActive, runtime.commandExecutionContext, executionReceipts)
 	runtime.files = toolfile.New(ws, skills.ResolveResource, runtime.command.CommandEnv)
 	runtime.dynamicMCP = toolmcp.New(mcpClients, envs)
 	runtime.media = toolmedia.New(cfg, ws, runtime.command.InternalCommandEnv)
@@ -96,7 +102,7 @@ func NewRuntime(cfg config.Config) (*Runtime, error) {
 	)
 	runtime.recall = toolrecall.New(func() config.Config { return runtime.cfg })
 	runtime.evolution = evolution.New(func() config.Config { return runtime.cfg }, tasks)
-	runtime.taskTools = tooltask.New(func() config.Config { return runtime.cfg }, tasks, runtime.evolution)
+	runtime.taskTools = tooltask.New(func() config.Config { return runtime.cfg }, tasks, runtime.evolution).WithExecutionEvidence(executionReceipts)
 	if cfg.ACPEnabled {
 		acpEnvironment := make(map[string]string, len(cfg.ACPEnvFromEnv))
 		for childName, hostName := range cfg.ACPEnvFromEnv {

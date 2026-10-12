@@ -65,6 +65,18 @@ func OutputSchema(name string) (map[string]any, bool) {
 		"exit_code":        intProp("Process exit code, when available."),
 		"elapsed_ms":       intProp("Session elapsed milliseconds."),
 		"timed_out":        boolProp("Whether the command timed out."),
+		"execution_receipt": map[string]any{
+			"type": "object", "additionalProperties": false,
+			"description": "Executor-issued durable receipt for a completed command. Use ref as TDD evidence.",
+			"properties": map[string]any{
+				"ref":            stringProp("Durable exec:// receipt reference."),
+				"issuer":         stringProp("Receipt issuer identity."),
+				"command_sha256": stringProp("SHA-256 of the normalized requested command."),
+				"started_at":     stringProp("Execution start timestamp."),
+				"finished_at":    stringProp("Execution finish timestamp."),
+			},
+		},
+		"execution_receipt_error": stringProp("Receipt persistence failure for a completed command; no TDD attestation is available when present."),
 	}
 	switch name {
 	case ToolExecCommand:

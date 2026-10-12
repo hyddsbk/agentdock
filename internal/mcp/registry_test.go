@@ -222,8 +222,8 @@ func assertObjectSchema(t *testing.T, name, kind string, schema map[string]any) 
 
 func TestTaskManageSchemaExposesLifecycleActions(t *testing.T) {
 	props := schemaProperties(t, "task_manage")
-	assertSameStrings(t, enumStrings(t, props["action"]), []string{"create", "list", "get", "backtrace", "revalidate", "export_audit_bundle", "verify_audit_bundle", "checkpoint", "block", "resume", "handoff", "final_review", "complete"})
-	for _, name := range []string{"completion_conditions", "steps", "step_id", "completed_step_ids", "current_step_id", "next_step_id", "context_refs", "status", "summary", "verified", "risks", "provenance_query", "review_revision", "audit_bundle", "expected_bundle_sha256"} {
+	assertSameStrings(t, enumStrings(t, props["action"]), []string{"create", "list", "get", "backtrace", "revalidate", "export_audit_bundle", "verify_audit_bundle", "export_signed_audit_bundle", "verify_signed_audit_bundle", "checkpoint", "block", "resume", "handoff", "final_review", "complete"})
+	for _, name := range []string{"completion_conditions", "steps", "step_id", "completed_step_ids", "current_step_id", "next_step_id", "context_refs", "status", "summary", "verified", "risks", "provenance_query", "review_revision", "audit_bundle", "audit_signature", "audit_trust_registry", "expected_root_key_id", "expected_trust_revision", "expected_bundle_sha256"} {
 		if _, ok := props[name]; !ok {
 			t.Fatalf("task_manage input schema missing %q", name)
 		}

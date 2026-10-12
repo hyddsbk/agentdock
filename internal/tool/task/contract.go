@@ -11,33 +11,37 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 	stringProp := toolcontract.String
 	boundedIntProp := toolcontract.BoundedInteger
 	props := map[string]any{
-		"action":                 map[string]any{"type": "string", "description": "Task lifecycle and read-only audit action. Use checkpoint to update progress and handoff to persist a fresh-session resume packet.", "enum": []string{"create", "list", "get", "backtrace", "revalidate", "export_audit_bundle", "verify_audit_bundle", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}},
-		"task_id":                stringProp("Persistent task id for get, backtrace scope, revalidate, export_audit_bundle, checkpoint, block, resume, handoff, final_review, or complete."),
-		"title":                  stringProp("Short task title. Required for action=create."),
-		"goal":                   stringProp("Fixed task goal. Required for action=create."),
-		"completion_conditions":  map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string"}, "description": "Conditions that must be true before final_review can pass. Required for action=create."},
-		"requirement_refs":       map[string]any{"type": "array", "maxItems": 32, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Optional authoritative requirement/spec pointers for traceable work. Every ref must be mapped by at least one step; do not copy spec prose here."},
-		"step_id":                stringProp("Task step id for a single-step checkpoint."),
-		"tdd_seam":               tddSeamInputSchema(),
-		"completed_step_ids":     map[string]any{"type": "array", "minItems": 1, "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Task step ids to mark completed in one atomic batch checkpoint."},
-		"current_step_id":        stringProp("Single task step id to mark in_progress in a batch checkpoint."),
-		"next_step_id":           stringProp("For handoff, the in-progress or dependency-ready step the next session should continue. Leave empty only for tasks with no steps."),
-		"context_refs":           map[string]any{"type": "array", "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "For handoff, compact pointers to authoritative context the next session should load; do not duplicate the source content."},
-		"status":                 map[string]any{"type": "string", "description": "Action-specific status: task list filter, single-step checkpoint status, or final review status.", "enum": []string{"active", "blocked", "completed", "pending", "in_progress", "pass", "failed"}},
-		"limit":                  boundedIntProp("Maximum tasks returned by list. Defaults to 50 and is capped at 200.", 1, 200),
-		"summary":                stringProp("Current progress, blocker, resume, handoff orientation, or final review summary."),
-		"diagnostic":             diagnosticEvidenceSchema(),
-		"execution_evidence":     executionEvidenceSchema(),
-		"execution_receipts":     executionReceiptsInputSchema(),
-		"verified":               map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Facts verified during final_review. Required when status=pass."},
-		"verified_evidence":      reviewEvidenceBindingsSchema("Server-validated bindings for every verified fact in a passing final_review."),
-		"risks":                  map[string]any{"type": "array", "maxItems": 16, "items": map[string]any{"type": "string"}, "description": "Unresolved risks for handoff, or remaining risks for a failed final_review."},
-		"intent_spec":            outcomeAxisSchema("Intent/spec compliance outcome. Required for final_review."),
-		"engineering_policy":     outcomeAxisSchema("Engineering/policy compliance outcome. Required for final_review."),
-		"provenance_query":       provenanceQuerySchema(cfg.NexusEndpoint != ""),
-		"review_revision":        stringProp("Optional immutable final-review revision pin for revalidate/export_audit_bundle. A mismatch fails closed."),
-		"audit_bundle":           portableAuditBundleInputSchema(),
-		"expected_bundle_sha256": stringProp("Optional externally pinned SHA-256 for verify_audit_bundle. Detects a fully rewritten bundle whose internal hashes were recomputed."),
+		"action":                  map[string]any{"type": "string", "description": "Task lifecycle and read-only audit action. Use checkpoint to update progress and handoff to persist a fresh-session resume packet.", "enum": []string{"create", "list", "get", "backtrace", "revalidate", "export_audit_bundle", "verify_audit_bundle", "export_signed_audit_bundle", "verify_signed_audit_bundle", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}},
+		"task_id":                 stringProp("Persistent task id for get, backtrace scope, revalidate, export_audit_bundle, checkpoint, block, resume, handoff, final_review, or complete."),
+		"title":                   stringProp("Short task title. Required for action=create."),
+		"goal":                    stringProp("Fixed task goal. Required for action=create."),
+		"completion_conditions":   map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string"}, "description": "Conditions that must be true before final_review can pass. Required for action=create."},
+		"requirement_refs":        map[string]any{"type": "array", "maxItems": 32, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Optional authoritative requirement/spec pointers for traceable work. Every ref must be mapped by at least one step; do not copy spec prose here."},
+		"step_id":                 stringProp("Task step id for a single-step checkpoint."),
+		"tdd_seam":                tddSeamInputSchema(),
+		"completed_step_ids":      map[string]any{"type": "array", "minItems": 1, "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Task step ids to mark completed in one atomic batch checkpoint."},
+		"current_step_id":         stringProp("Single task step id to mark in_progress in a batch checkpoint."),
+		"next_step_id":            stringProp("For handoff, the in-progress or dependency-ready step the next session should continue. Leave empty only for tasks with no steps."),
+		"context_refs":            map[string]any{"type": "array", "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "For handoff, compact pointers to authoritative context the next session should load; do not duplicate the source content."},
+		"status":                  map[string]any{"type": "string", "description": "Action-specific status: task list filter, single-step checkpoint status, or final review status.", "enum": []string{"active", "blocked", "completed", "pending", "in_progress", "pass", "failed"}},
+		"limit":                   boundedIntProp("Maximum tasks returned by list. Defaults to 50 and is capped at 200.", 1, 200),
+		"summary":                 stringProp("Current progress, blocker, resume, handoff orientation, or final review summary."),
+		"diagnostic":              diagnosticEvidenceSchema(),
+		"execution_evidence":      executionEvidenceSchema(),
+		"execution_receipts":      executionReceiptsInputSchema(),
+		"verified":                map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Facts verified during final_review. Required when status=pass."},
+		"verified_evidence":       reviewEvidenceBindingsSchema("Server-validated bindings for every verified fact in a passing final_review."),
+		"risks":                   map[string]any{"type": "array", "maxItems": 16, "items": map[string]any{"type": "string"}, "description": "Unresolved risks for handoff, or remaining risks for a failed final_review."},
+		"intent_spec":             outcomeAxisSchema("Intent/spec compliance outcome. Required for final_review."),
+		"engineering_policy":      outcomeAxisSchema("Engineering/policy compliance outcome. Required for final_review."),
+		"provenance_query":        provenanceQuerySchema(cfg.NexusEndpoint != ""),
+		"review_revision":         stringProp("Optional immutable final-review revision pin for revalidate/export_audit_bundle/export_signed_audit_bundle. A mismatch fails closed."),
+		"audit_bundle":            portableAuditBundleInputSchema(),
+		"audit_signature":         openAuditObjectSchema("Detached audit signature produced by the trusted AgentDock signer."),
+		"audit_trust_registry":    openAuditObjectSchema("Public root-signed audit trust registry used for independent verification."),
+		"expected_root_key_id":    stringProp("Externally pinned audit root key id required by verify_signed_audit_bundle; embedded registry roots are never trusted by themselves."),
+		"expected_trust_revision": boundedIntProp("Externally pinned minimum audit trust-registry revision. Prevents replay of a valid pre-revocation registry.", 1, 2147483647),
+		"expected_bundle_sha256":  stringProp("Optional externally pinned P8 bundle SHA-256 for audit bundle verification actions."),
 	}
 
 	if cfg.NexusEndpoint == "" {
@@ -70,6 +74,14 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 		},
 	}
 	return taskManageInputObject(props)
+}
+
+func openAuditObjectSchema(description string) map[string]any {
+	return map[string]any{
+		"type":                 "object",
+		"description":          description,
+		"additionalProperties": true,
+	}
 }
 
 func provenanceQuerySchema(withNexus bool) map[string]any {
@@ -230,7 +242,7 @@ func taskManageInputObject(props map[string]any) map[string]any {
 		},
 		map[string]any{
 			"if": map[string]any{
-				"properties": map[string]any{"action": map[string]any{"enum": []string{"revalidate", "export_audit_bundle"}}},
+				"properties": map[string]any{"action": map[string]any{"enum": []string{"revalidate", "export_audit_bundle", "export_signed_audit_bundle"}}},
 				"required":   []string{"action"},
 			},
 			"then": map[string]any{"required": []string{"task_id"}},
@@ -242,6 +254,13 @@ func taskManageInputObject(props map[string]any) map[string]any {
 			},
 			"then": map[string]any{"required": []string{"audit_bundle"}},
 		},
+		map[string]any{
+			"if": map[string]any{
+				"properties": map[string]any{"action": map[string]any{"const": "verify_signed_audit_bundle"}},
+				"required":   []string{"action"},
+			},
+			"then": map[string]any{"required": []string{"audit_bundle", "audit_signature", "audit_trust_registry", "expected_root_key_id", "expected_trust_revision"}},
+		},
 	}
 	return schema
 }
@@ -252,21 +271,26 @@ func ManageOutputSchema(cfg config.Config) map[string]any {
 	arrayProp := toolcontract.ObjectArray
 	objectProp := toolcontract.OpenObject
 	props := map[string]any{
-		"action":               stringProp("Completed task action."),
-		"task_id":              stringProp("Persistent task id returned by create and usable with task lifecycle actions."),
-		"task":                 objectProp("Full persistent task state returned only by get."),
-		"task_summary":         objectProp("Compact task summary returned by task lifecycle actions."),
-		"review_status":        stringProp("Final review status when present: not_started, pass, or failed."),
-		"final_review":         objectProp("Compact final review state with status and counts."),
-		"tasks":                arrayProp("Compact task summaries ordered by most recent update."),
-		"count":                intProp("Returned item count."),
-		"state_dir":            stringProp("Local AgentDock task state directory."),
-		"next_required_action": stringProp("Concise guidance for checkpoint progress, handoff/resume, or final review."),
-		"resume_context":       objectProp("Derived fresh-session resume packet returned by handoff and get when a current handoff exists."),
-		"backtrace":            objectProp("Read-only provenance-backtrace/v1 graph returned only by action=backtrace."),
-		"integrity":            objectProp("Read-only provenance-integrity/v1 report returned by revalidation, export, or offline verification."),
-		"audit_bundle":         objectProp("Portable provenance-audit-bundle/v1 returned only when export_audit_bundle passes integrity validation."),
-		"bundle_sha256":        stringProp("Portable audit bundle SHA-256. Pin this externally to detect later full-bundle replacement."),
+		"action":                  stringProp("Completed task action."),
+		"task_id":                 stringProp("Persistent task id returned by create and usable with task lifecycle actions."),
+		"task":                    objectProp("Full persistent task state returned only by get."),
+		"task_summary":            objectProp("Compact task summary returned by task lifecycle actions."),
+		"review_status":           stringProp("Final review status when present: not_started, pass, or failed."),
+		"final_review":            objectProp("Compact final review state with status and counts."),
+		"tasks":                   arrayProp("Compact task summaries ordered by most recent update."),
+		"count":                   intProp("Returned item count."),
+		"state_dir":               stringProp("Local AgentDock task state directory."),
+		"next_required_action":    stringProp("Concise guidance for checkpoint progress, handoff/resume, or final review."),
+		"resume_context":          objectProp("Derived fresh-session resume packet returned by handoff and get when a current handoff exists."),
+		"backtrace":               objectProp("Read-only provenance-backtrace/v1 graph returned only by action=backtrace."),
+		"integrity":               objectProp("Read-only provenance-integrity/v1 report returned by revalidation, export, or offline verification."),
+		"audit_bundle":            objectProp("Portable provenance-audit-bundle/v1 returned when unsigned or signed export passes integrity validation."),
+		"audit_signature":         objectProp("Detached audit-detached-signature/v1 returned by export_signed_audit_bundle."),
+		"audit_trust_registry":    objectProp("Public root-signed audit-trust-registry/v1 snapshot returned by export_signed_audit_bundle."),
+		"signed_verification":     objectProp("provenance-trust/v1 report returned by verify_signed_audit_bundle."),
+		"root_key_id":             stringProp("Pinned audit root key identity required to authenticate signed portable audit bundles."),
+		"trust_registry_revision": intProp("Current root-signed trust registry revision. Pin the latest known revision with root_key_id to prevent stale-registry replay."),
+		"bundle_sha256":           stringProp("Portable audit bundle SHA-256. P8 callers may pin this directly; P9 callers normally pin root_key_id plus trust_registry_revision instead."),
 	}
 	if cfg.NexusEndpoint != "" {
 		props["next_required_action"] = stringProp("Concise guidance for checkpoint progress, handoff/resume, template composition, or final review.")

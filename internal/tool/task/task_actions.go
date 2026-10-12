@@ -5,49 +5,55 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
+	"github.com/uvwt/agentdock/internal/audittrust"
 	"github.com/uvwt/agentdock/internal/taskstate"
 )
 
-var taskActions = []string{"create", "list", "get", "backtrace", "revalidate", "export_audit_bundle", "verify_audit_bundle", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}
+var taskActions = []string{"create", "list", "get", "backtrace", "revalidate", "export_audit_bundle", "verify_audit_bundle", "export_signed_audit_bundle", "verify_signed_audit_bundle", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}
 
 var workflowTemplateActions = []string{"publish", "retire", "list", "get", "get_many", "match", "vector_index"}
 
 type taskManageInput struct {
-	Action               string
-	Title                string
-	Goal                 string
-	Project              string
-	Device               string
-	CompletionConditions []string
-	RequirementRefs      []string
-	Steps                []taskstate.TaskStepInput
-	TemplateID           string
-	SourceTemplateIDs    []string
-	LearningChecks       []taskstate.EvolutionBinding
-	Status               string
-	Limit                int
-	TaskID               string
-	StepID               string
-	TDDSeam              *TDDSeamRequest
-	ExecutionReceipts    []ExecutionReceiptRequest
-	CompletedStepIDs     []string
-	CompletedStepIDsSet  bool
-	CurrentStepID        string
-	NextStepID           string
-	Summary              string
-	ContextRefs          []string
-	Diagnostic           *taskstate.DiagnosticEvidence
-	ExecutionEvidence    *taskstate.ExecutionEvidence
-	Verified             []string
-	VerifiedEvidence     []taskstate.ReviewEvidenceBinding
-	Risks                []string
-	IntentSpec           *taskstate.OutcomeAxis
-	EngineeringPolicy    *taskstate.OutcomeAxis
-	ProvenanceQuery      *ProvenanceQueryRequest
-	ReviewRevision       string
-	AuditBundle          *PortableAuditBundle
-	ExpectedBundleSHA256 string
+	Action                string
+	Title                 string
+	Goal                  string
+	Project               string
+	Device                string
+	CompletionConditions  []string
+	RequirementRefs       []string
+	Steps                 []taskstate.TaskStepInput
+	TemplateID            string
+	SourceTemplateIDs     []string
+	LearningChecks        []taskstate.EvolutionBinding
+	Status                string
+	Limit                 int
+	TaskID                string
+	StepID                string
+	TDDSeam               *TDDSeamRequest
+	ExecutionReceipts     []ExecutionReceiptRequest
+	CompletedStepIDs      []string
+	CompletedStepIDsSet   bool
+	CurrentStepID         string
+	NextStepID            string
+	Summary               string
+	ContextRefs           []string
+	Diagnostic            *taskstate.DiagnosticEvidence
+	ExecutionEvidence     *taskstate.ExecutionEvidence
+	Verified              []string
+	VerifiedEvidence      []taskstate.ReviewEvidenceBinding
+	Risks                 []string
+	IntentSpec            *taskstate.OutcomeAxis
+	EngineeringPolicy     *taskstate.OutcomeAxis
+	ProvenanceQuery       *ProvenanceQueryRequest
+	ReviewRevision        string
+	AuditBundle           *PortableAuditBundle
+	AuditSignature        *audittrust.DetachedSignature
+	AuditTrustRegistry    *audittrust.Registry
+	ExpectedRootKeyID     string
+	ExpectedTrustRevision int
+	ExpectedBundleSHA256  string
 }
 
 type workflowTemplateInput struct {
@@ -95,38 +101,42 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 	}
 
 	input := taskManageInput{
-		Action:               strings.ToLower(strings.TrimSpace(request.Action)),
-		Title:                request.Title,
-		Goal:                 request.Goal,
-		Project:              strings.ToLower(strings.TrimSpace(request.Project)),
-		Device:               strings.TrimSpace(request.Device),
-		CompletionConditions: append([]string(nil), request.CompletionConditions...),
-		RequirementRefs:      append([]string(nil), request.RequirementRefs...),
-		Steps:                steps,
-		TemplateID:           strings.TrimSpace(request.TemplateID),
-		SourceTemplateIDs:    append([]string(nil), request.SourceTemplateIDs...),
-		LearningChecks:       learningChecks,
-		Status:               strings.ToLower(strings.TrimSpace(request.Status)),
-		Limit:                intValue(request.Limit, 50),
-		TaskID:               request.TaskID,
-		StepID:               request.StepID,
-		TDDSeam:              request.TDDSeam,
-		ExecutionReceipts:    append([]ExecutionReceiptRequest(nil), request.ExecutionReceipts...),
-		CurrentStepID:        request.CurrentStepID,
-		NextStepID:           request.NextStepID,
-		Summary:              request.Summary,
-		ContextRefs:          append([]string(nil), request.ContextRefs...),
-		Diagnostic:           request.Diagnostic,
-		ExecutionEvidence:    executionEvidence,
-		Verified:             append([]string(nil), request.Verified...),
-		VerifiedEvidence:     append([]taskstate.ReviewEvidenceBinding(nil), request.VerifiedEvidence...),
-		Risks:                append([]string(nil), request.Risks...),
-		IntentSpec:           request.IntentSpec,
-		EngineeringPolicy:    request.EngineeringPolicy,
-		ProvenanceQuery:      request.ProvenanceQuery,
-		ReviewRevision:       strings.TrimSpace(request.ReviewRevision),
-		AuditBundle:          request.AuditBundle,
-		ExpectedBundleSHA256: strings.ToLower(strings.TrimSpace(request.ExpectedBundleSHA256)),
+		Action:                strings.ToLower(strings.TrimSpace(request.Action)),
+		Title:                 request.Title,
+		Goal:                  request.Goal,
+		Project:               strings.ToLower(strings.TrimSpace(request.Project)),
+		Device:                strings.TrimSpace(request.Device),
+		CompletionConditions:  append([]string(nil), request.CompletionConditions...),
+		RequirementRefs:       append([]string(nil), request.RequirementRefs...),
+		Steps:                 steps,
+		TemplateID:            strings.TrimSpace(request.TemplateID),
+		SourceTemplateIDs:     append([]string(nil), request.SourceTemplateIDs...),
+		LearningChecks:        learningChecks,
+		Status:                strings.ToLower(strings.TrimSpace(request.Status)),
+		Limit:                 intValue(request.Limit, 50),
+		TaskID:                request.TaskID,
+		StepID:                request.StepID,
+		TDDSeam:               request.TDDSeam,
+		ExecutionReceipts:     append([]ExecutionReceiptRequest(nil), request.ExecutionReceipts...),
+		CurrentStepID:         request.CurrentStepID,
+		NextStepID:            request.NextStepID,
+		Summary:               request.Summary,
+		ContextRefs:           append([]string(nil), request.ContextRefs...),
+		Diagnostic:            request.Diagnostic,
+		ExecutionEvidence:     executionEvidence,
+		Verified:              append([]string(nil), request.Verified...),
+		VerifiedEvidence:      append([]taskstate.ReviewEvidenceBinding(nil), request.VerifiedEvidence...),
+		Risks:                 append([]string(nil), request.Risks...),
+		IntentSpec:            request.IntentSpec,
+		EngineeringPolicy:     request.EngineeringPolicy,
+		ProvenanceQuery:       request.ProvenanceQuery,
+		ReviewRevision:        strings.TrimSpace(request.ReviewRevision),
+		AuditBundle:           request.AuditBundle,
+		AuditSignature:        request.AuditSignature,
+		AuditTrustRegistry:    request.AuditTrustRegistry,
+		ExpectedRootKeyID:     strings.TrimSpace(request.ExpectedRootKeyID),
+		ExpectedTrustRevision: request.ExpectedTrustRevision,
+		ExpectedBundleSHA256:  strings.ToLower(strings.TrimSpace(request.ExpectedBundleSHA256)),
 	}
 	if request.CompletedStepIDs != nil {
 		input.CompletedStepIDsSet = true
@@ -159,20 +169,37 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 	if input.Action == "backtrace" && input.ProvenanceQuery == nil {
 		return input, toolErrorDetails("VALIDATION_ERROR", "provenance_query is required for backtrace", "validation", map[string]any{"field": "provenance_query"})
 	}
-	if input.ReviewRevision != "" && input.Action != "revalidate" && input.Action != "export_audit_bundle" {
-		return input, toolErrorDetails("VALIDATION_ERROR", "review_revision is only valid for revalidate or export_audit_bundle", "validation", map[string]any{"field": "review_revision", "action": input.Action})
+	if input.ReviewRevision != "" && input.Action != "revalidate" && input.Action != "export_audit_bundle" && input.Action != "export_signed_audit_bundle" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "review_revision is only valid for revalidate, export_audit_bundle, or export_signed_audit_bundle", "validation", map[string]any{"field": "review_revision", "action": input.Action})
 	}
-	if input.AuditBundle != nil && input.Action != "verify_audit_bundle" {
-		return input, toolErrorDetails("VALIDATION_ERROR", "audit_bundle is only valid for verify_audit_bundle", "validation", map[string]any{"field": "audit_bundle", "action": input.Action})
+	if input.AuditBundle != nil && input.Action != "verify_audit_bundle" && input.Action != "verify_signed_audit_bundle" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "audit_bundle is only valid for verify_audit_bundle or verify_signed_audit_bundle", "validation", map[string]any{"field": "audit_bundle", "action": input.Action})
+	}
+	if input.AuditSignature != nil && input.Action != "verify_signed_audit_bundle" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "audit_signature is only valid for verify_signed_audit_bundle", "validation", map[string]any{"field": "audit_signature", "action": input.Action})
+	}
+	if input.AuditTrustRegistry != nil && input.Action != "verify_signed_audit_bundle" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "audit_trust_registry is only valid for verify_signed_audit_bundle", "validation", map[string]any{"field": "audit_trust_registry", "action": input.Action})
+	}
+	if input.ExpectedRootKeyID != "" && input.Action != "verify_signed_audit_bundle" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "expected_root_key_id is only valid for verify_signed_audit_bundle", "validation", map[string]any{"field": "expected_root_key_id", "action": input.Action})
+	}
+	if input.ExpectedTrustRevision != 0 && input.Action != "verify_signed_audit_bundle" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "expected_trust_revision is only valid for verify_signed_audit_bundle", "validation", map[string]any{"field": "expected_trust_revision", "action": input.Action})
 	}
 	if input.Action == "verify_audit_bundle" && input.AuditBundle == nil {
 		return input, toolErrorDetails("VALIDATION_ERROR", "audit_bundle is required for verify_audit_bundle", "validation", map[string]any{"field": "audit_bundle"})
 	}
-	if input.ExpectedBundleSHA256 != "" && input.Action != "verify_audit_bundle" {
-		return input, toolErrorDetails("VALIDATION_ERROR", "expected_bundle_sha256 is only valid for verify_audit_bundle", "validation", map[string]any{"field": "expected_bundle_sha256", "action": input.Action})
+	if input.Action == "verify_signed_audit_bundle" {
+		if input.AuditBundle == nil || input.AuditSignature == nil || input.AuditTrustRegistry == nil || input.ExpectedRootKeyID == "" || input.ExpectedTrustRevision <= 0 {
+			return input, toolErrorDetails("VALIDATION_ERROR", "verify_signed_audit_bundle requires audit_bundle, audit_signature, audit_trust_registry, expected_root_key_id, and expected_trust_revision > 0", "validation", map[string]any{"action": input.Action})
+		}
 	}
-	if (input.Action == "revalidate" || input.Action == "export_audit_bundle") && strings.TrimSpace(input.TaskID) == "" {
-		return input, toolErrorDetails("VALIDATION_ERROR", "task_id is required for provenance integrity actions", "validation", map[string]any{"field": "task_id", "action": input.Action})
+	if input.ExpectedBundleSHA256 != "" && input.Action != "verify_audit_bundle" && input.Action != "verify_signed_audit_bundle" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "expected_bundle_sha256 is only valid for audit bundle verification actions", "validation", map[string]any{"field": "expected_bundle_sha256", "action": input.Action})
+	}
+	if (input.Action == "revalidate" || input.Action == "export_audit_bundle" || input.Action == "export_signed_audit_bundle") && strings.TrimSpace(input.TaskID) == "" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "task_id is required for provenance integrity export actions", "validation", map[string]any{"field": "task_id", "action": input.Action})
 	}
 	if (strings.TrimSpace(input.NextStepID) != "" || len(input.ContextRefs) > 0) && input.Action != "handoff" {
 		return input, toolErrorDetails("VALIDATION_ERROR", "next_step_id and top-level context_refs are only valid for handoff", "validation", map[string]any{"action": input.Action})
@@ -331,6 +358,36 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 	case "verify_audit_bundle":
 		report := VerifyPortableAuditBundleExpected(*input.AuditBundle, input.ExpectedBundleSHA256)
 		return Result{"action": input.Action, "integrity": report, "bundle_sha256": report.BundleSHA256, "state_dir": s.tasks.Root()}, nil
+	case "export_signed_audit_bundle":
+		report, bundle := s.provenanceIntegrity(ctx, input.TaskID, input.ReviewRevision)
+		result := Result{"action": input.Action, "integrity": report, "state_dir": s.tasks.Root()}
+		if !report.Valid || bundle == nil {
+			return result, nil
+		}
+		cfg := s.config()
+		signature, registry, signErr := audittrust.SignWithRegistry(cfg.AgentDockHome, audittrust.SignInput{
+			BundleContract: bundle.Contract,
+			BundleSHA256:   bundle.Manifest.BundleSHA256,
+			TaskID:         bundle.Manifest.TaskID,
+			ReviewRevision: bundle.Manifest.ReviewRevision,
+		}, time.Now())
+		if signErr != nil {
+			return nil, taskToolError(signErr)
+		}
+		result["audit_bundle"] = *bundle
+		result["bundle_sha256"] = bundle.Manifest.BundleSHA256
+		result["audit_signature"] = signature
+		result["audit_trust_registry"] = registry
+		result["root_key_id"] = registry.RootKeyID
+		result["trust_registry_revision"] = registry.Revision
+		return result, nil
+	case "verify_signed_audit_bundle":
+		report := VerifySignedPortableAuditBundleExpected(*input.AuditBundle, *input.AuditSignature, *input.AuditTrustRegistry, input.ExpectedRootKeyID, input.ExpectedBundleSHA256, input.ExpectedTrustRevision, time.Now())
+		return Result{
+			"action": input.Action, "signed_verification": report, "integrity": report.Integrity,
+			"bundle_sha256": report.Integrity.BundleSHA256, "root_key_id": report.Trust.RootKeyID,
+			"trust_registry_revision": report.Trust.RegistryRevision, "state_dir": s.tasks.Root(),
+		}, nil
 	case "get":
 		task, err = s.tasks.Get(input.TaskID)
 		if err != nil {

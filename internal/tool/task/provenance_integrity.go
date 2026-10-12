@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -547,6 +549,9 @@ func failedIntegrityReport(taskID, revision string, err error) ProvenanceIntegri
 func classifyIntegrityError(err error) string {
 	if err == nil {
 		return "INTEGRITY_FAILURE"
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return "BROKEN_LINK"
 	}
 	message := strings.ToLower(err.Error())
 	switch {

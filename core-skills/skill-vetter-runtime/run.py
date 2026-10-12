@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
 import json
-import os
 import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-VERSION = "0.1.5"
+VERSION = "0.1.8"
 BASE = Path(__file__).resolve().parent
-AGENTDOCK_HOME = Path(os.environ.get("AGENTDOCK_HOME", Path.home() / ".agentdock"))
-WORKSPACE = Path(os.environ.get("AGENTDOCK_DEFAULT_DIR", Path.home() / "AgentDock"))
-INSTALLED_ROOT = AGENTDOCK_HOME / "skill-store" / "installed"
 
 TEXT_EXTENSIONS = {
     ".md", ".txt", ".json", ".yaml", ".yml", ".py", ".js", ".ts", ".tsx", ".jsx",
@@ -216,8 +212,7 @@ def handle_status():
         "python": sys.executable,
         "clawhub": clawhub,
         "clawhub_available": bool(clawhub),
-        "workspace": str(WORKSPACE),
-        "installed_root": str(INSTALLED_ROOT),
+        "default_allowed_roots": [str(Path.cwd().resolve())],
     })
 
 
@@ -268,14 +263,25 @@ def handle_vet_clawhub(args):
     emit({"ok": True, "report": build_report("clawhub", slug, files, metadata, notes)})
 
 
-def allowed_local_path(path, allow_outside):
+def allowed_roots_from_args(args):
+    raw = args.get("allowed_roots")
+    if raw is None:
+        return [Path.cwd().resolve()]
+    if not isinstance(raw, list) or not raw or any(not isinstance(item, str) or not item.strip() for item in raw):
+        fail("INVALID_INPUT", "allowed_roots must be a non-empty array of path strings")
+    return [Path(item).expanduser().resolve() for item in raw]
+
+
+def allowed_local_path(path, allowed_roots, allow_outside):
     resolved = path.expanduser().resolve()
     if allow_outside:
         return resolved
-    allowed = [WORKSPACE.resolve(), INSTALLED_ROOT.resolve()]
-    if any(resolved == root or root in resolved.parents for root in allowed):
+    if any(resolved == root or root in resolved.parents for root in allowed_roots):
         return resolved
-    fail("PATH_NOT_ALLOWED", "Path is outside AgentDock skill roots", {"path": str(resolved), "allowed_roots": [str(p) for p in allowed]})
+    fail("PATH_NOT_ALLOWED", "Path is outside allowed roots", {
+        "path": str(resolved),
+        "allowed_roots": [str(root) for root in allowed_roots],
+    })
 
 
 def handle_vet_local(args):
@@ -284,8 +290,9 @@ def handle_vet_local(args):
         fail("INVALID_INPUT", "path must be a non-empty string")
     max_files = as_int(args, "max_files", 80, 1, 200)
     max_file_chars = as_int(args, "max_file_chars", 50000, 1000, 200000)
-    allow_outside = bool(args.get("allow_outside_agentdock", False))
-    root = allowed_local_path(Path(raw_path), allow_outside)
+    allowed_roots = allowed_roots_from_args(args)
+    allow_outside = bool(args.get("allow_outside_roots", args.get("allow_outside_agentdock", False)))
+    root = allowed_local_path(Path(raw_path), allowed_roots, allow_outside)
     if not root.exists():
         fail("PATH_NOT_FOUND", "Path does not exist", {"path": str(root)})
     paths = [root] if root.is_file() else sorted(p for p in root.rglob("*") if p.is_file())
@@ -319,7 +326,7 @@ def main():
     elif action == "vet-local-path":
         handle_vet_local(args)
     else:
-        fail("UNKNOWN_OPERATION", "Unknown operation", {"operation": operation})
+        fail("UNKNOWN_OPERATION", "Unknown operation", {"operation": action})
 
 
 if __name__ == "__main__":

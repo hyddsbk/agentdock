@@ -163,3 +163,71 @@ func TestTaskManageSignedAuditExportAndOfflineVerify(t *testing.T) {
 		t.Fatal("signed audit verification accepted a missing external root pin")
 	}
 }
+
+func TestTaskManageSignedAuditExportAndVerify(t *testing.T) {
+	fixture := newP8Fixture(t)
+	cfg := fixture.service.config()
+	now := time.Date(2026, 10, 12, 7, 0, 0, 0, time.UTC)
+	registry, err := audittrust.Init(cfg.AgentDockHome, audittrust.Subject{NodeID: "node_task_manage", DeviceID: "device_task_manage"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	exported, err := fixture.service.manageTest(context.Background(), map[string]any{
+		"action": "export_signed_audit_bundle", "task_id": fixture.taskID, "review_revision": fixture.revision,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle, ok := exported["audit_bundle"].(PortableAuditBundle)
+	if !ok {
+		t.Fatalf("audit bundle type = %T", exported["audit_bundle"])
+	}
+	signature, ok := exported["audit_signature"].(audittrust.DetachedSignature)
+	if !ok {
+		t.Fatalf("audit signature type = %T", exported["audit_signature"])
+	}
+	exportedRegistry, ok := exported["audit_trust_registry"].(audittrust.Registry)
+	if !ok {
+		t.Fatalf("audit registry type = %T", exported["audit_trust_registry"])
+	}
+	if signature.Statement.RegistryRevision != registry.Revision || exportedRegistry.Revision != registry.Revision {
+		t.Fatalf("signature/registry snapshot mismatch: signature=%d registry=%d", signature.Statement.RegistryRevision, exportedRegistry.Revision)
+	}
+
+	verified, err := fixture.service.manageTest(context.Background(), map[string]any{
+		"action":                  "verify_signed_audit_bundle",
+		"audit_bundle":            bundle,
+		"audit_signature":         signature,
+		"audit_trust_registry":    exportedRegistry,
+		"expected_root_key_id":    registry.RootKeyID,
+		"expected_trust_revision": registry.Revision,
+		"expected_bundle_sha256":  bundle.Manifest.BundleSHA256,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, ok := verified["signed_verification"].(SignedAuditVerificationReport)
+	if !ok {
+		t.Fatalf("signed verification type = %T", verified["signed_verification"])
+	}
+	if !report.Valid || !report.Integrity.Valid || !report.Trust.Valid {
+		t.Fatalf("signed verification = %#v", report)
+	}
+
+	stale, err := normalizeTaskManageRequest(ManageRequest{
+		Action:                "verify_signed_audit_bundle",
+		AuditBundle:           &bundle,
+		AuditSignature:        &signature,
+		AuditTrustRegistry:    &exportedRegistry,
+		ExpectedRootKeyID:     registry.RootKeyID,
+		ExpectedTrustRevision: registry.Revision + 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	staleReport := VerifySignedPortableAuditBundleExpected(*stale.AuditBundle, *stale.AuditSignature, *stale.AuditTrustRegistry, stale.ExpectedRootKeyID, "", stale.ExpectedTrustRevision, now.Add(time.Minute))
+	if staleReport.Valid || !hasTrustFinding(staleReport, "TRUST_REGISTRY_STALE") {
+		t.Fatalf("stale trust registry was accepted: %#v", staleReport)
+	}
+}

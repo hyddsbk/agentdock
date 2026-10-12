@@ -18,14 +18,16 @@ import (
 
 	"github.com/uvwt/agentdock/internal/fs/atomicfile"
 	"github.com/uvwt/agentdock/internal/fs/filelock"
+	"github.com/uvwt/agentdock/internal/secretstore"
 )
 
 const (
-	RegistryContract  = "audit-trust-registry/v1"
-	SignatureContract = "audit-detached-signature/v1"
-	StatementContract = "audit-signature-statement/v1"
-	Algorithm         = "ed25519"
-	storeVersion      = 1
+	RegistryContract   = "audit-trust-registry/v1"
+	SignatureContract  = "audit-detached-signature/v1"
+	StatementContract  = "audit-signature-statement/v1"
+	Algorithm          = "ed25519"
+	storeVersion       = 1
+	storeSecretPurpose = "agentdock.audit-trust.private-v1"
 )
 
 const (
@@ -730,7 +732,13 @@ func saveStore(path string, store privateStore) error {
 		return fmt.Errorf("encode audit trust private store: %w", err)
 	}
 	data = append(data, '\n')
-	if err := atomicfile.Write(path, data, 0o600); err != nil {
+	protected, err := secretstore.Protect(data, storeSecretPurpose)
+	clear(data)
+	if err != nil {
+		return fmt.Errorf("protect audit trust private store: %w", err)
+	}
+	defer clear(protected)
+	if err := atomicfile.Write(path, protected, 0o600); err != nil {
 		return fmt.Errorf("write audit trust private store: %w", err)
 	}
 	return nil
@@ -747,10 +755,16 @@ func loadStore(path string) (privateStore, error) {
 	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
 		return privateStore{}, errors.New("audit trust store must be a regular file")
 	}
-	data, err := os.ReadFile(path)
+	protected, err := os.ReadFile(path)
 	if err != nil {
 		return privateStore{}, fmt.Errorf("read audit trust private store: %w", err)
 	}
+	defer clear(protected)
+	data, err := secretstore.Unprotect(protected, storeSecretPurpose)
+	if err != nil {
+		return privateStore{}, fmt.Errorf("unprotect audit trust private store: %w", err)
+	}
+	defer clear(data)
 	var store privateStore
 	if err := json.Unmarshal(data, &store); err != nil {
 		return privateStore{}, fmt.Errorf("decode audit trust private store: %w", err)

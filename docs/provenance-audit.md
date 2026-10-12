@@ -78,7 +78,7 @@ The public key embedded in a registry is never self-authenticating. Verification
 
 The registry subject contains the paired Nexus `node_id` and `device_id`. Device tokens, OAuth secrets, and audit private keys are never exported in the portable trust material.
 
-The local private store is `<AGENTDOCK_HOME>/audit-trust/private-v1.json`, written through AgentDock's private atomic-file path. It contains the audit root private key and only currently usable child signing keys. Public `audit-trust-registry/v1` exports contain public keys and lifecycle metadata only.
+The local private store is `<AGENTDOCK_HOME>/audit-trust/private-v1.json`, written through AgentDock's private atomic-file path. It contains the audit root private key and only currently usable child signing keys. On Windows the serialized store is additionally protected with current-user DPAPI and a fixed AgentDock audit-trust entropy purpose before it reaches disk; on non-Windows the confidentiality boundary remains the private directory/file permissions. Public `audit-trust-registry/v1` exports contain public keys and lifecycle metadata only.
 
 ### Rotation and revocation
 

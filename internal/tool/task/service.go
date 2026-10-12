@@ -23,10 +23,11 @@ type EvolutionEvidenceProvider interface {
 }
 
 type Service struct {
-	config    ConfigProvider
-	tasks     *taskstate.Store
-	evolution EvolutionProvider
-	receipts  *execevidence.Store
+	config           ConfigProvider
+	tasks            *taskstate.Store
+	evolution        EvolutionProvider
+	receipts         *execevidence.Store
+	trustCheckpoints TrustCheckpointProvider
 }
 
 func New(configProvider ConfigProvider, tasks *taskstate.Store, evolution ...EvolutionProvider) *Service {
@@ -39,5 +40,10 @@ func New(configProvider ConfigProvider, tasks *taskstate.Store, evolution ...Evo
 
 func (s *Service) WithExecutionEvidence(store *execevidence.Store) *Service {
 	s.receipts = store
+	return s
+}
+
+func (s *Service) WithTrustCheckpointProvider(provider TrustCheckpointProvider) *Service {
+	s.trustCheckpoints = provider
 	return s
 }

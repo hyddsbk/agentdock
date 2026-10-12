@@ -7,9 +7,16 @@ import (
 	"github.com/uvwt/agentdock/internal/buildinfo"
 	"github.com/uvwt/agentdock/internal/config"
 	toolmcp "github.com/uvwt/agentdock/internal/tool/mcp"
+	tooltask "github.com/uvwt/agentdock/internal/tool/task"
 )
 
 const runtimeAPISource = "agentdock-api"
+
+func (r *Runtime) SetTrustCheckpointProvider(provider tooltask.TrustCheckpointProvider) {
+	if r != nil && r.taskTools != nil {
+		r.taskTools.WithTrustCheckpointProvider(provider)
+	}
+}
 
 func (r *Runtime) RuntimeStatus() Result {
 	tools := r.ToolNames()

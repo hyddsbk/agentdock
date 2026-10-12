@@ -83,6 +83,7 @@ type ManageRequest struct {
 	AuditBundle           *PortableAuditBundle              `json:"audit_bundle,omitempty"`
 	AuditSignature        *audittrust.DetachedSignature     `json:"audit_signature,omitempty"`
 	AuditTrustRegistry    *audittrust.Registry              `json:"audit_trust_registry,omitempty"`
+	AuditTrustCheckpoint  *audittrust.Checkpoint            `json:"audit_trust_checkpoint,omitempty"`
 	ExpectedRootKeyID     string                            `json:"expected_root_key_id,omitempty"`
 	ExpectedTrustRevision int                               `json:"expected_trust_revision,omitempty"`
 	ExpectedBundleSHA256  string                            `json:"expected_bundle_sha256,omitempty"`

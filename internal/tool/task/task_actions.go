@@ -11,7 +11,7 @@ import (
 	"github.com/uvwt/agentdock/internal/taskstate"
 )
 
-var taskActions = []string{"create", "list", "get", "backtrace", "revalidate", "export_audit_bundle", "verify_audit_bundle", "export_signed_audit_bundle", "verify_signed_audit_bundle", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}
+var taskActions = []string{"create", "list", "get", "backtrace", "revalidate", "export_audit_bundle", "verify_audit_bundle", "export_signed_audit_bundle", "verify_signed_audit_bundle", "verify_signed_audit_bundle_online", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}
 
 var workflowTemplateActions = []string{"publish", "retire", "list", "get", "get_many", "match", "vector_index"}
 
@@ -51,6 +51,7 @@ type taskManageInput struct {
 	AuditBundle           *PortableAuditBundle
 	AuditSignature        *audittrust.DetachedSignature
 	AuditTrustRegistry    *audittrust.Registry
+	AuditTrustCheckpoint  *audittrust.Checkpoint
 	ExpectedRootKeyID     string
 	ExpectedTrustRevision int
 	ExpectedBundleSHA256  string
@@ -134,6 +135,7 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 		AuditBundle:           request.AuditBundle,
 		AuditSignature:        request.AuditSignature,
 		AuditTrustRegistry:    request.AuditTrustRegistry,
+		AuditTrustCheckpoint:  request.AuditTrustCheckpoint,
 		ExpectedRootKeyID:     strings.TrimSpace(request.ExpectedRootKeyID),
 		ExpectedTrustRevision: request.ExpectedTrustRevision,
 		ExpectedBundleSHA256:  strings.ToLower(strings.TrimSpace(request.ExpectedBundleSHA256)),
@@ -172,17 +174,20 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 	if input.ReviewRevision != "" && input.Action != "revalidate" && input.Action != "export_audit_bundle" && input.Action != "export_signed_audit_bundle" {
 		return input, toolErrorDetails("VALIDATION_ERROR", "review_revision is only valid for revalidate, export_audit_bundle, or export_signed_audit_bundle", "validation", map[string]any{"field": "review_revision", "action": input.Action})
 	}
-	if input.AuditBundle != nil && input.Action != "verify_audit_bundle" && input.Action != "verify_signed_audit_bundle" {
-		return input, toolErrorDetails("VALIDATION_ERROR", "audit_bundle is only valid for verify_audit_bundle or verify_signed_audit_bundle", "validation", map[string]any{"field": "audit_bundle", "action": input.Action})
+	if input.AuditBundle != nil && input.Action != "verify_audit_bundle" && input.Action != "verify_signed_audit_bundle" && input.Action != "verify_signed_audit_bundle_online" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "audit_bundle is only valid for audit verification actions", "validation", map[string]any{"field": "audit_bundle", "action": input.Action})
 	}
-	if input.AuditSignature != nil && input.Action != "verify_signed_audit_bundle" {
-		return input, toolErrorDetails("VALIDATION_ERROR", "audit_signature is only valid for verify_signed_audit_bundle", "validation", map[string]any{"field": "audit_signature", "action": input.Action})
+	if input.AuditSignature != nil && input.Action != "verify_signed_audit_bundle" && input.Action != "verify_signed_audit_bundle_online" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "audit_signature is only valid for signed audit verification actions", "validation", map[string]any{"field": "audit_signature", "action": input.Action})
 	}
 	if input.AuditTrustRegistry != nil && input.Action != "verify_signed_audit_bundle" {
 		return input, toolErrorDetails("VALIDATION_ERROR", "audit_trust_registry is only valid for verify_signed_audit_bundle", "validation", map[string]any{"field": "audit_trust_registry", "action": input.Action})
 	}
+	if input.AuditTrustCheckpoint != nil && input.Action != "verify_signed_audit_bundle" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "audit_trust_checkpoint is only valid for verify_signed_audit_bundle", "validation", map[string]any{"field": "audit_trust_checkpoint", "action": input.Action})
+	}
 	if input.ExpectedRootKeyID != "" && input.Action != "verify_signed_audit_bundle" {
-		return input, toolErrorDetails("VALIDATION_ERROR", "expected_root_key_id is only valid for verify_signed_audit_bundle", "validation", map[string]any{"field": "expected_root_key_id", "action": input.Action})
+		return input, toolErrorDetails("VALIDATION_ERROR", "expected_root_key_id is only valid for explicit-pin signed audit verification", "validation", map[string]any{"field": "expected_root_key_id", "action": input.Action})
 	}
 	if input.ExpectedTrustRevision != 0 && input.Action != "verify_signed_audit_bundle" {
 		return input, toolErrorDetails("VALIDATION_ERROR", "expected_trust_revision is only valid for verify_signed_audit_bundle", "validation", map[string]any{"field": "expected_trust_revision", "action": input.Action})
@@ -191,11 +196,21 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 		return input, toolErrorDetails("VALIDATION_ERROR", "audit_bundle is required for verify_audit_bundle", "validation", map[string]any{"field": "audit_bundle"})
 	}
 	if input.Action == "verify_signed_audit_bundle" {
-		if input.AuditBundle == nil || input.AuditSignature == nil || input.AuditTrustRegistry == nil || input.ExpectedRootKeyID == "" || input.ExpectedTrustRevision <= 0 {
-			return input, toolErrorDetails("VALIDATION_ERROR", "verify_signed_audit_bundle requires audit_bundle, audit_signature, audit_trust_registry, expected_root_key_id, and expected_trust_revision > 0", "validation", map[string]any{"action": input.Action})
+		if input.AuditBundle == nil || input.AuditSignature == nil || input.AuditTrustRegistry == nil || input.ExpectedRootKeyID == "" {
+			return input, toolErrorDetails("VALIDATION_ERROR", "verify_signed_audit_bundle requires audit_bundle, audit_signature, audit_trust_registry, and expected_root_key_id", "validation", map[string]any{"action": input.Action})
+		}
+		legacyMode := input.ExpectedTrustRevision > 0 && input.AuditTrustCheckpoint == nil
+		checkpointMode := input.ExpectedTrustRevision == 0 && input.AuditTrustCheckpoint != nil
+		if !legacyMode && !checkpointMode {
+			return input, toolErrorDetails("VALIDATION_ERROR", "verify_signed_audit_bundle requires exactly one freshness source: expected_trust_revision or audit_trust_checkpoint", "validation", map[string]any{"action": input.Action})
 		}
 	}
-	if input.ExpectedBundleSHA256 != "" && input.Action != "verify_audit_bundle" && input.Action != "verify_signed_audit_bundle" {
+	if input.Action == "verify_signed_audit_bundle_online" {
+		if input.AuditBundle == nil || input.AuditSignature == nil {
+			return input, toolErrorDetails("VALIDATION_ERROR", "verify_signed_audit_bundle_online requires audit_bundle and audit_signature; trust root comes only from bootstrapped verifier state", "validation", map[string]any{"action": input.Action})
+		}
+	}
+	if input.ExpectedBundleSHA256 != "" && input.Action != "verify_audit_bundle" && input.Action != "verify_signed_audit_bundle" && input.Action != "verify_signed_audit_bundle_online" {
 		return input, toolErrorDetails("VALIDATION_ERROR", "expected_bundle_sha256 is only valid for audit bundle verification actions", "validation", map[string]any{"field": "expected_bundle_sha256", "action": input.Action})
 	}
 	if (input.Action == "revalidate" || input.Action == "export_audit_bundle" || input.Action == "export_signed_audit_bundle") && strings.TrimSpace(input.TaskID) == "" {
@@ -382,11 +397,37 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 		result["trust_registry_revision"] = registry.Revision
 		return result, nil
 	case "verify_signed_audit_bundle":
+		if input.AuditTrustCheckpoint != nil {
+			report := VerifySignedPortableAuditBundleCheckpointExpected(*input.AuditBundle, *input.AuditSignature, *input.AuditTrustRegistry, *input.AuditTrustCheckpoint, input.ExpectedRootKeyID, input.ExpectedBundleSHA256, time.Now())
+			return Result{
+				"action": input.Action, "freshness_verification": report, "signed_verification": report.Signed, "integrity": report.Signed.Integrity,
+				"bundle_sha256": report.Signed.Integrity.BundleSHA256, "root_key_id": report.Signed.Trust.RootKeyID,
+				"trust_registry_revision": report.Freshness.RegistryRevision, "state_dir": s.tasks.Root(),
+			}, nil
+		}
 		report := VerifySignedPortableAuditBundleExpected(*input.AuditBundle, *input.AuditSignature, *input.AuditTrustRegistry, input.ExpectedRootKeyID, input.ExpectedBundleSHA256, input.ExpectedTrustRevision, time.Now())
 		return Result{
 			"action": input.Action, "signed_verification": report, "integrity": report.Integrity,
 			"bundle_sha256": report.Integrity.BundleSHA256, "root_key_id": report.Trust.RootKeyID,
 			"trust_registry_revision": report.Trust.RegistryRevision, "state_dir": s.tasks.Root(),
+		}, nil
+	case "verify_signed_audit_bundle_online":
+		if s.trustCheckpoints == nil {
+			return nil, toolErrorDetails("TRUST_CHECKPOINT_PROVIDER_UNAVAILABLE", "online signed audit verification requires a Nexus trust checkpoint provider", "runtime", nil)
+		}
+		snapshot, fetchErr := s.trustCheckpoints.FetchTrustCheckpoint(ctx, input.AuditSignature.Statement.NodeID)
+		if fetchErr != nil {
+			return nil, taskToolError(fetchErr)
+		}
+		cfg := s.config()
+		report, state, verifyErr := VerifySignedPortableAuditBundleCheckpointWithTrustState(cfg.AgentDockHome, *input.AuditBundle, *input.AuditSignature, snapshot.Registry, snapshot.Checkpoint, input.ExpectedBundleSHA256, time.Now())
+		if verifyErr != nil {
+			return nil, taskToolError(verifyErr)
+		}
+		return Result{
+			"action": input.Action, "freshness_verification": report, "signed_verification": report.Signed, "integrity": report.Signed.Integrity,
+			"bundle_sha256": report.Signed.Integrity.BundleSHA256, "root_key_id": report.Signed.Trust.RootKeyID,
+			"trust_registry_revision": report.Freshness.RegistryRevision, "trust_state": state, "state_dir": s.tasks.Root(),
 		}, nil
 	case "get":
 		task, err = s.tasks.Get(input.TaskID)

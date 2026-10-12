@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -29,6 +30,8 @@ func runAuditCommand(args []string, stdout io.Writer) error {
 		return runAuditVerifySignedCommand(args[1:], stdout)
 	case "verify-signed-stateful":
 		return runAuditVerifySignedStatefulCommand(args[1:], stdout)
+	case "verify-signed-online":
+		return runAuditVerifySignedOnlineCommand(args[1:], stdout)
 	case "trust":
 		return runAuditTrustCommand(args[1:], stdout)
 	case "trust-state":
@@ -128,11 +131,17 @@ func runAuditVerifySignedCommand(args []string, stdout io.Writer) error {
 	flags.SetOutput(io.Discard)
 	signaturePath := flags.String("signature", "", "detached signature path")
 	registryPath := flags.String("trust-registry", "", "trusted audit registry path")
+	checkpointPath := flags.String("trust-checkpoint", "", "portable audit trust checkpoint snapshot path")
 	rootKeyID := flags.String("trust-root", "", "externally pinned audit root key id")
 	trustRevision := flags.Int("trust-revision", 0, "externally pinned minimum trust registry revision")
 	expectedSHA := flags.String("expect-sha256", "", "optional expected P8 bundle SHA-256")
-	if err := flags.Parse(reorderAuditFlagArgs(args)); err != nil || flags.NArg() != 1 || strings.TrimSpace(*signaturePath) == "" || strings.TrimSpace(*registryPath) == "" || strings.TrimSpace(*rootKeyID) == "" || *trustRevision <= 0 {
-		return errors.New("usage: agentdock audit verify-signed <bundle.json> --signature <signature.json> --trust-registry <registry.json> --trust-root <root_key_id> --trust-revision <revision> [--expect-sha256 <sha256>]")
+	if err := flags.Parse(reorderAuditFlagArgs(args)); err != nil || flags.NArg() != 1 || strings.TrimSpace(*signaturePath) == "" || strings.TrimSpace(*rootKeyID) == "" {
+		return auditVerifySignedUsageError()
+	}
+	legacyMode := strings.TrimSpace(*registryPath) != "" && strings.TrimSpace(*checkpointPath) == "" && *trustRevision > 0
+	checkpointMode := strings.TrimSpace(*checkpointPath) != "" && strings.TrimSpace(*registryPath) == "" && *trustRevision == 0
+	if !legacyMode && !checkpointMode {
+		return auditVerifySignedUsageError()
 	}
 	bundle, err := readAuditBundle(flags.Arg(0))
 	if err != nil {
@@ -141,6 +150,20 @@ func runAuditVerifySignedCommand(args []string, stdout io.Writer) error {
 	signature, err := audittrust.LoadSignatureFile(*signaturePath)
 	if err != nil {
 		return err
+	}
+	if checkpointMode {
+		snapshot, err := nexusbridge.LoadAuditTrustCheckpointSnapshot(*checkpointPath)
+		if err != nil {
+			return err
+		}
+		report := tasktool.VerifySignedPortableAuditBundleCheckpointExpected(bundle, signature, snapshot.Registry, snapshot.Checkpoint, *rootKeyID, strings.TrimSpace(*expectedSHA), time.Now())
+		if err := writeJSON(stdout, report); err != nil {
+			return err
+		}
+		if !report.Valid {
+			return errors.New("signed audit bundle freshness verification failed")
+		}
+		return nil
 	}
 	registry, err := audittrust.LoadRegistryFile(*registryPath)
 	if err != nil {
@@ -161,10 +184,16 @@ func runAuditVerifySignedStatefulCommand(args []string, stdout io.Writer) error 
 	flags.SetOutput(io.Discard)
 	signaturePath := flags.String("signature", "", "detached signature path")
 	registryPath := flags.String("trust-registry", "", "trusted audit registry path")
+	checkpointPath := flags.String("trust-checkpoint", "", "portable audit trust checkpoint snapshot path")
 	home := flags.String("home", "", "AgentDock home containing verifier trust state")
 	expectedSHA := flags.String("expect-sha256", "", "optional expected P8 bundle SHA-256")
-	if err := flags.Parse(reorderAuditFlagArgs(args)); err != nil || flags.NArg() != 1 || strings.TrimSpace(*signaturePath) == "" || strings.TrimSpace(*registryPath) == "" {
-		return errors.New("usage: agentdock audit verify-signed-stateful <bundle.json> --signature <signature.json> --trust-registry <registry.json> [--home <dir>] [--expect-sha256 <sha256>]")
+	if err := flags.Parse(reorderAuditFlagArgs(args)); err != nil || flags.NArg() != 1 || strings.TrimSpace(*signaturePath) == "" {
+		return auditVerifySignedStatefulUsageError()
+	}
+	registryMode := strings.TrimSpace(*registryPath) != "" && strings.TrimSpace(*checkpointPath) == ""
+	checkpointMode := strings.TrimSpace(*checkpointPath) != "" && strings.TrimSpace(*registryPath) == ""
+	if !registryMode && !checkpointMode {
+		return auditVerifySignedStatefulUsageError()
 	}
 	bundle, err := readAuditBundle(flags.Arg(0))
 	if err != nil {
@@ -174,11 +203,28 @@ func runAuditVerifySignedStatefulCommand(args []string, stdout io.Writer) error 
 	if err != nil {
 		return err
 	}
-	registry, err := audittrust.LoadRegistryFile(*registryPath)
+	resolvedHome, err := resolveAuditHome(*home)
 	if err != nil {
 		return err
 	}
-	resolvedHome, err := resolveAuditHome(*home)
+	if checkpointMode {
+		snapshot, err := nexusbridge.LoadAuditTrustCheckpointSnapshot(*checkpointPath)
+		if err != nil {
+			return err
+		}
+		report, state, err := tasktool.VerifySignedPortableAuditBundleCheckpointWithTrustState(resolvedHome, bundle, signature, snapshot.Registry, snapshot.Checkpoint, strings.TrimSpace(*expectedSHA), time.Now())
+		if err != nil {
+			return err
+		}
+		if err := writeJSON(stdout, map[string]any{"verification": report, "trust_state": state}); err != nil {
+			return err
+		}
+		if !report.Valid {
+			return errors.New("stateful signed audit bundle freshness verification failed")
+		}
+		return nil
+	}
+	registry, err := audittrust.LoadRegistryFile(*registryPath)
 	if err != nil {
 		return err
 	}
@@ -186,15 +232,51 @@ func runAuditVerifySignedStatefulCommand(args []string, stdout io.Writer) error 
 	if err != nil {
 		return err
 	}
-	output := map[string]any{
-		"verification": report,
-		"trust_state":  state,
-	}
-	if err := writeJSON(stdout, output); err != nil {
+	if err := writeJSON(stdout, map[string]any{"verification": report, "trust_state": state}); err != nil {
 		return err
 	}
 	if !report.Valid {
 		return errors.New("stateful signed audit bundle trust verification failed")
+	}
+	return nil
+}
+
+func runAuditVerifySignedOnlineCommand(args []string, stdout io.Writer) error {
+	flags := flag.NewFlagSet("agentdock audit verify-signed-online", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	signaturePath := flags.String("signature", "", "detached signature path")
+	home := flags.String("home", "", "AgentDock home containing verifier trust state and paired Nexus identity")
+	expectedSHA := flags.String("expect-sha256", "", "optional expected P8 bundle SHA-256")
+	if err := flags.Parse(reorderAuditFlagArgs(args)); err != nil || flags.NArg() != 1 || strings.TrimSpace(*signaturePath) == "" {
+		return errors.New("usage: agentdock audit verify-signed-online <bundle.json> --signature <signature.json> [--home <dir>] [--expect-sha256 <sha256>]")
+	}
+	bundle, err := readAuditBundle(flags.Arg(0))
+	if err != nil {
+		return err
+	}
+	signature, err := audittrust.LoadSignatureFile(*signaturePath)
+	if err != nil {
+		return err
+	}
+	resolvedHome, err := resolveAuditHome(*home)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	snapshot, err := nexusbridge.FetchAuditTrustCheckpoint(ctx, resolvedHome, signature.Statement.NodeID)
+	if err != nil {
+		return err
+	}
+	report, state, err := tasktool.VerifySignedPortableAuditBundleCheckpointWithTrustState(resolvedHome, bundle, signature, snapshot.Registry, snapshot.Checkpoint, strings.TrimSpace(*expectedSHA), time.Now())
+	if err != nil {
+		return err
+	}
+	if err := writeJSON(stdout, map[string]any{"verification": report, "trust_state": state}); err != nil {
+		return err
+	}
+	if !report.Valid {
+		return errors.New("online signed audit bundle freshness verification failed")
 	}
 	return nil
 }
@@ -306,6 +388,8 @@ func runAuditTrustCommand(args []string, stdout io.Writer) error {
 			return err
 		}
 		return writeTrustSummary(stdout, registry)
+	case "checkpoint":
+		return runAuditTrustCheckpointCommand(args[1:], stdout)
 	case "export":
 		flags := flag.NewFlagSet("agentdock audit trust export", flag.ContinueOnError)
 		flags.SetOutput(io.Discard)
@@ -333,6 +417,112 @@ func runAuditTrustCommand(args []string, stdout io.Writer) error {
 		return writePublicFile(*out, data)
 	default:
 		return auditTrustUsageError()
+	}
+}
+
+func runAuditTrustCheckpointCommand(args []string, stdout io.Writer) error {
+	if len(args) == 0 {
+		return auditTrustCheckpointUsageError()
+	}
+	switch args[0] {
+	case "create", "publish":
+		flags := flag.NewFlagSet("agentdock audit trust checkpoint "+args[0], flag.ContinueOnError)
+		flags.SetOutput(io.Discard)
+		home := flags.String("home", "", "AgentDock signer home")
+		freshFor := flags.Duration("fresh-for", 6*time.Hour, "signed checkpoint freshness window")
+		out := flags.String("out", "", "optional checkpoint snapshot output path; use - for stdout")
+		if err := flags.Parse(reorderAuditFlagArgs(args[1:])); err != nil || flags.NArg() != 0 {
+			return auditTrustCheckpointUsageError()
+		}
+		resolvedHome, err := resolveAuditHome(*home)
+		if err != nil {
+			return err
+		}
+		checkpoint, registry, err := audittrust.CreateCheckpoint(resolvedHome, *freshFor, time.Now())
+		if err != nil {
+			return err
+		}
+		snapshot := nexusbridge.AuditTrustCheckpointSnapshot{
+			Contract:   nexusbridge.AuditTrustCheckpointSnapshotContract,
+			NodeID:     checkpoint.Statement.NodeID,
+			Checkpoint: checkpoint,
+			Registry:   registry,
+		}
+		if args[0] == "publish" {
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			snapshot, err = nexusbridge.PublishAuditTrustCheckpoint(ctx, resolvedHome, checkpoint, registry)
+			if err != nil {
+				return err
+			}
+			verification := audittrust.VerifyCheckpoint(snapshot.Registry, snapshot.Checkpoint, registry.RootKeyID, time.Now())
+			if !verification.Valid {
+				return errors.New("Nexus returned an invalid audit trust checkpoint snapshot")
+			}
+		}
+		if strings.TrimSpace(*out) != "" {
+			data, err := nexusbridge.MarshalAuditTrustCheckpointSnapshot(snapshot)
+			if err != nil {
+				return err
+			}
+			if *out == "-" {
+				if _, err := stdout.Write(data); err != nil {
+					return err
+				}
+				return nil
+			}
+			if err := writePublicFile(*out, data); err != nil {
+				return err
+			}
+		}
+		return writeJSON(stdout, map[string]any{
+			"contract":          snapshot.Contract,
+			"node_id":           snapshot.NodeID,
+			"root_key_id":       snapshot.Registry.RootKeyID,
+			"registry_revision": snapshot.Registry.Revision,
+			"registry_sha256":   snapshot.Checkpoint.Statement.RegistrySHA256,
+			"fresh_until":       snapshot.Checkpoint.Statement.FreshUntil,
+			"published":         args[0] == "publish",
+		})
+	case "fetch":
+		flags := flag.NewFlagSet("agentdock audit trust checkpoint fetch", flag.ContinueOnError)
+		flags.SetOutput(io.Discard)
+		home := flags.String("home", "", "AgentDock home containing paired Nexus identity")
+		out := flags.String("out", "-", "checkpoint snapshot output path or -")
+		if err := flags.Parse(reorderAuditFlagArgs(args[1:])); err != nil || flags.NArg() != 1 {
+			return auditTrustCheckpointUsageError()
+		}
+		resolvedHome, err := resolveAuditHome(*home)
+		if err != nil {
+			return err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		snapshot, err := nexusbridge.FetchAuditTrustCheckpoint(ctx, resolvedHome, flags.Arg(0))
+		if err != nil {
+			return err
+		}
+		data, err := nexusbridge.MarshalAuditTrustCheckpointSnapshot(snapshot)
+		if err != nil {
+			return err
+		}
+		if *out == "-" {
+			_, err = stdout.Write(data)
+			return err
+		}
+		if err := writePublicFile(*out, data); err != nil {
+			return err
+		}
+		return writeJSON(stdout, map[string]any{
+			"contract":          snapshot.Contract,
+			"node_id":           snapshot.NodeID,
+			"root_key_id":       snapshot.Registry.RootKeyID,
+			"registry_revision": snapshot.Registry.Revision,
+			"fresh_until":       snapshot.Checkpoint.Statement.FreshUntil,
+			"snapshot_path":     filepath.Clean(*out),
+		})
+	default:
+		return auditTrustCheckpointUsageError()
 	}
 }
 
@@ -501,15 +691,27 @@ func writeTrustSummary(stdout io.Writer, registry audittrust.Registry) error {
 }
 
 func auditUsageError() error {
-	return errors.New("usage: agentdock audit <verify|sign|verify-signed|verify-signed-stateful|trust|trust-state> ...")
+	return errors.New("usage: agentdock audit <verify|sign|verify-signed|verify-signed-stateful|verify-signed-online|trust|trust-state> ...")
 }
 
 func auditTrustUsageError() error {
-	return errors.New("usage: agentdock audit trust <init|status|rotate|rollover-root|revoke|export> ...")
+	return errors.New("usage: agentdock audit trust <init|status|rotate|rollover-root|revoke|export|checkpoint> ...")
 }
 
 func auditTrustStateUsageError() error {
 	return errors.New("usage: agentdock audit trust-state <bootstrap|status|apply-rollover|rebootstrap> ...")
+}
+
+func auditVerifySignedUsageError() error {
+	return errors.New("usage: agentdock audit verify-signed <bundle.json> --signature <signature.json> --trust-root <root_key_id> (--trust-registry <registry.json> --trust-revision <revision> | --trust-checkpoint <snapshot.json>) [--expect-sha256 <sha256>]")
+}
+
+func auditVerifySignedStatefulUsageError() error {
+	return errors.New("usage: agentdock audit verify-signed-stateful <bundle.json> --signature <signature.json> (--trust-registry <registry.json> | --trust-checkpoint <snapshot.json>) [--home <dir>] [--expect-sha256 <sha256>]")
+}
+
+func auditTrustCheckpointUsageError() error {
+	return errors.New("usage: agentdock audit trust checkpoint <create|publish|fetch> ...")
 }
 
 // reorderAuditFlagArgs lets the audit CLI accept the documented spelling

@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/uvwt/agentdock/internal/audittrust"
 	"github.com/uvwt/agentdock/internal/nexusbridge"
 )
 
@@ -93,6 +95,53 @@ func TestAuditTrustCLIInitializesRotatesRevokesAndExportsPublicRegistry(t *testi
 	}
 	if strings.Contains(text, "private_key") {
 		t.Fatalf("private key leaked in public registry: %s", text)
+	}
+}
+
+func TestAuditTrustCheckpointCLICreatesPortableFreshnessSnapshot(t *testing.T) {
+	home := t.TempDir()
+	if err := nexusbridge.Save(home, nexusbridge.Identity{
+		Version: 1, Endpoint: "http://127.0.0.1:18777",
+		NodeID: "node_p11_cli", DeviceID: "device_p11_cli", DeviceToken: "test-device-token",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var initOut bytes.Buffer
+	if err := runAuditCommand([]string{"trust", "init", "--home", home}, &initOut); err != nil {
+		t.Fatal(err)
+	}
+	var initSummary map[string]any
+	if err := json.Unmarshal(initOut.Bytes(), &initSummary); err != nil {
+		t.Fatal(err)
+	}
+	rootID, _ := initSummary["root_key_id"].(string)
+
+	snapshotPath := filepath.Join(t.TempDir(), "checkpoint.json")
+	var checkpointOut bytes.Buffer
+	if err := runAuditCommand([]string{
+		"trust", "checkpoint", "create",
+		"--home", home,
+		"--fresh-for", "1h",
+		"--out", snapshotPath,
+	}, &checkpointOut); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := nexusbridge.LoadAuditTrustCheckpointSnapshot(snapshotPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Registry.RootKeyID != rootID || snapshot.Checkpoint.Statement.RegistryRevision != snapshot.Registry.Revision {
+		t.Fatalf("checkpoint snapshot = %#v", snapshot)
+	}
+	if report := audittrust.VerifyCheckpoint(snapshot.Registry, snapshot.Checkpoint, rootID, time.Now()); !report.Valid {
+		t.Fatalf("checkpoint verification = %#v", report)
+	}
+	data, err := os.ReadFile(snapshotPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "private_key") {
+		t.Fatalf("private key leaked in checkpoint snapshot: %s", data)
 	}
 }
 

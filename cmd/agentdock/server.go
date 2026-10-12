@@ -92,6 +92,9 @@ func runServer(ctx context.Context, args []string, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if identityErr == nil {
+		runtime.SetTrustCheckpointProvider(nexusTrustCheckpointProvider{home: cfg.AgentDockHome})
+	}
 	defer func() {
 		if err := runtime.Close(); err != nil {
 			slog.Warn("runtime close failed", "error", err)

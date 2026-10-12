@@ -11,7 +11,7 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 	stringProp := toolcontract.String
 	boundedIntProp := toolcontract.BoundedInteger
 	props := map[string]any{
-		"action":                  map[string]any{"type": "string", "description": "Task lifecycle and read-only audit action. Use checkpoint to update progress and handoff to persist a fresh-session resume packet.", "enum": []string{"create", "list", "get", "backtrace", "revalidate", "export_audit_bundle", "verify_audit_bundle", "export_signed_audit_bundle", "verify_signed_audit_bundle", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}},
+		"action":                  map[string]any{"type": "string", "description": "Task lifecycle and read-only audit action. Use checkpoint to update progress and handoff to persist a fresh-session resume packet.", "enum": []string{"create", "list", "get", "backtrace", "revalidate", "export_audit_bundle", "verify_audit_bundle", "export_signed_audit_bundle", "verify_signed_audit_bundle", "verify_signed_audit_bundle_online", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}},
 		"task_id":                 stringProp("Persistent task id for get, backtrace scope, revalidate, export_audit_bundle, checkpoint, block, resume, handoff, final_review, or complete."),
 		"title":                   stringProp("Short task title. Required for action=create."),
 		"goal":                    stringProp("Fixed task goal. Required for action=create."),
@@ -39,8 +39,9 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 		"audit_bundle":            portableAuditBundleInputSchema(),
 		"audit_signature":         openAuditObjectSchema("Detached audit signature produced by the trusted AgentDock signer."),
 		"audit_trust_registry":    openAuditObjectSchema("Public root-signed audit trust registry used for independent verification."),
-		"expected_root_key_id":    stringProp("Externally pinned audit root key id required by verify_signed_audit_bundle; embedded registry roots are never trusted by themselves."),
-		"expected_trust_revision": boundedIntProp("Externally pinned minimum audit trust-registry revision. Prevents replay of a valid pre-revocation registry.", 1, 2147483647),
+		"audit_trust_checkpoint":  openAuditObjectSchema("Root-signed audit trust checkpoint used as the freshness authority for offline verification."),
+		"expected_root_key_id":    stringProp("Externally pinned audit root key id for explicit-pin signed audit verification. Online checkpoint verification uses the bootstrapped verifier trust state instead."),
+		"expected_trust_revision": boundedIntProp("Legacy P9 externally pinned minimum audit trust-registry revision. Omit when audit_trust_checkpoint supplies freshness.", 1, 2147483647),
 		"expected_bundle_sha256":  stringProp("Optional externally pinned P8 bundle SHA-256 for audit bundle verification actions."),
 	}
 
@@ -259,7 +260,14 @@ func taskManageInputObject(props map[string]any) map[string]any {
 				"properties": map[string]any{"action": map[string]any{"const": "verify_signed_audit_bundle"}},
 				"required":   []string{"action"},
 			},
-			"then": map[string]any{"required": []string{"audit_bundle", "audit_signature", "audit_trust_registry", "expected_root_key_id", "expected_trust_revision"}},
+			"then": map[string]any{"required": []string{"audit_bundle", "audit_signature", "audit_trust_registry", "expected_root_key_id"}},
+		},
+		map[string]any{
+			"if": map[string]any{
+				"properties": map[string]any{"action": map[string]any{"const": "verify_signed_audit_bundle_online"}},
+				"required":   []string{"action"},
+			},
+			"then": map[string]any{"required": []string{"audit_bundle", "audit_signature"}},
 		},
 	}
 	return schema
@@ -288,6 +296,8 @@ func ManageOutputSchema(cfg config.Config) map[string]any {
 		"audit_signature":         objectProp("Detached audit-detached-signature/v1 returned by export_signed_audit_bundle."),
 		"audit_trust_registry":    objectProp("Public root-signed audit-trust-registry/v1 snapshot returned by export_signed_audit_bundle."),
 		"signed_verification":     objectProp("provenance-trust/v1 report returned by verify_signed_audit_bundle."),
+		"freshness_verification":  objectProp("provenance-trust-freshness/v1 report returned when a root-signed trust checkpoint supplies freshness."),
+		"trust_state":             objectProp("Current audit-trust-state/v1 verifier state returned by state-anchored online freshness verification."),
 		"root_key_id":             stringProp("Pinned audit root key identity required to authenticate signed portable audit bundles."),
 		"trust_registry_revision": intProp("Current root-signed trust registry revision. Pin the latest known revision with root_key_id to prevent stale-registry replay."),
 		"bundle_sha256":           stringProp("Portable audit bundle SHA-256. P8 callers may pin this directly; P9 callers normally pin root_key_id plus trust_registry_revision instead."),

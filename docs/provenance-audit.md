@@ -147,3 +147,38 @@ P10 does not add a `task_manage` write action and does not modify Task, executio
 ### P10 backward compatibility
 
 P9 explicit-pin `verify-signed` and `task_manage action=verify_signed_audit_bundle` remain valid and unchanged. P10 is additive: callers that do not opt into verifier trust state continue to use the P8/P9 contracts exactly as before.
+
+## P11 trust checkpoint freshness
+
+P11 adds bounded freshness without creating a new trust root. The signer may create an `audit-trust-checkpoint/v1` that binds its paired `node_id`/`device_id`, current root key id, exact trust-registry revision and SHA-256, plus `issued_at` and `fresh_until`. The checkpoint statement is signed by the current audit root and the freshness window is capped at 24 hours.
+
+A checkpoint is only a freshness authority **under an already trusted P10 root**. Stateful verification requires an existing `audit-trust-state/v1`; checkpoint subject and root must exactly match that state, and the registry revision may not be older than `highest_accepted_registry_revision`. A checkpoint from another root fails closed and cannot bootstrap or replace verifier state. Planned root changes must first pass P10 `apply-rollover`; suspected compromise still requires explicit P10 `rebootstrap`.
+
+Create or publish a checkpoint from the signer:
+
+```
+agentdock audit trust checkpoint create --fresh-for 6h --out checkpoint.json
+agentdock audit trust checkpoint publish --fresh-for 6h --out checkpoint.json
+```
+
+Portable offline verification can use the root-signed snapshot with either an external P9 root pin or an existing P10 verifier state:
+
+```
+agentdock audit verify-signed bundle.json \
+  --signature bundle.sig.json \
+  --trust-root audit-root-sha256:<hex> \
+  --trust-checkpoint checkpoint.json
+
+agentdock audit verify-signed-stateful bundle.json \
+  --signature bundle.sig.json \
+  --trust-checkpoint checkpoint.json
+```
+
+Online verification fetches the latest checkpoint snapshot from the paired NexusDock and anchors it to local P10 verifier state:
+
+```
+agentdock audit verify-signed-online bundle.json \
+  --signature bundle.sig.json
+```
+
+NexusDock stores only an authenticated node's latest monotonic checkpoint. It rejects lower revisions and same-revision equivocation, and it does not gain Task/Evolution evidence-writing authority or root-bootstrap authority. Only a fully passing checkpoint plus P8/P9 verification may advance the verifier's accepted registry revision; an expired or tampered checkpoint, or an invalid bundle, never advances state.

@@ -95,3 +95,100 @@ func TestAuditTrustCLIInitializesRotatesRevokesAndExportsPublicRegistry(t *testi
 		t.Fatalf("private key leaked in public registry: %s", text)
 	}
 }
+
+func TestAuditTrustStateCLIPersistsRevisionAndAppliesRootContinuity(t *testing.T) {
+	signerHome := t.TempDir()
+	verifierHome := t.TempDir()
+	if err := nexusbridge.Save(signerHome, nexusbridge.Identity{
+		Version: 1, Endpoint: "http://127.0.0.1:18777",
+		NodeID: "node_p10_cli", DeviceID: "device_p10_cli", DeviceToken: "test-device-token",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var initOut bytes.Buffer
+	if err := runAuditCommand([]string{"trust", "init", "--home", signerHome}, &initOut); err != nil {
+		t.Fatal(err)
+	}
+	var initSummary map[string]any
+	if err := json.Unmarshal(initOut.Bytes(), &initSummary); err != nil {
+		t.Fatal(err)
+	}
+	oldRootID, _ := initSummary["root_key_id"].(string)
+	if oldRootID == "" {
+		t.Fatalf("init summary = %#v", initSummary)
+	}
+
+	dir := t.TempDir()
+	oldRegistryPath := filepath.Join(dir, "registry-v1.json")
+	if err := runAuditCommand([]string{"trust", "export", "--home", signerHome, "--out", oldRegistryPath}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	var bootstrapOut bytes.Buffer
+	if err := runAuditCommand([]string{
+		"trust-state", "bootstrap",
+		"--home", verifierHome,
+		"--trust-registry", oldRegistryPath,
+		"--trust-root", oldRootID,
+		"--trust-revision", "1",
+	}, &bootstrapOut); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(bootstrapOut.String(), `"contract": "audit-trust-state/v1"`) ||
+		!strings.Contains(bootstrapOut.String(), `"highest_accepted_registry_revision": 1`) {
+		t.Fatalf("bootstrap state = %s", bootstrapOut.String())
+	}
+
+	continuityPath := filepath.Join(dir, "root-continuity.json")
+	var rolloverOut bytes.Buffer
+	if err := runAuditCommand([]string{
+		"trust", "rollover-root",
+		"--home", signerHome,
+		"--continuity", continuityPath,
+	}, &rolloverOut); err != nil {
+		t.Fatal(err)
+	}
+	var rolloverSummary map[string]any
+	if err := json.Unmarshal(rolloverOut.Bytes(), &rolloverSummary); err != nil {
+		t.Fatal(err)
+	}
+	newRootID, _ := rolloverSummary["root_key_id"].(string)
+	if newRootID == "" || newRootID == oldRootID {
+		t.Fatalf("root rollover summary = %#v", rolloverSummary)
+	}
+	continuityData, err := os.ReadFile(continuityPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(continuityData), `"contract": "audit-root-continuity/v1"`) ||
+		!strings.Contains(string(continuityData), `"previous_root_signature"`) ||
+		!strings.Contains(string(continuityData), `"next_root_signature"`) {
+		t.Fatalf("continuity document = %s", continuityData)
+	}
+
+	newRegistryPath := filepath.Join(dir, "registry-v2.json")
+	if err := runAuditCommand([]string{"trust", "export", "--home", signerHome, "--out", newRegistryPath}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	var applyOut bytes.Buffer
+	if err := runAuditCommand([]string{
+		"trust-state", "apply-rollover",
+		"--home", verifierHome,
+		"--continuity", continuityPath,
+		"--trust-registry", newRegistryPath,
+	}, &applyOut); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(applyOut.String(), newRootID) ||
+		!strings.Contains(applyOut.String(), `"highest_accepted_registry_revision": 2`) {
+		t.Fatalf("applied state = %s", applyOut.String())
+	}
+
+	var statusOut bytes.Buffer
+	if err := runAuditCommand([]string{"trust-state", "status", "--home", verifierHome}, &statusOut); err != nil {
+		t.Fatal(err)
+	}
+	if statusOut.String() != applyOut.String() {
+		t.Fatalf("persisted state differs from applied state:\napply=%s\nstatus=%s", applyOut.String(), statusOut.String())
+	}
+}

@@ -24,7 +24,33 @@ func VerifySignedPortableAuditBundle(bundle PortableAuditBundle, signature audit
 func VerifySignedPortableAuditBundleExpected(bundle PortableAuditBundle, signature audittrust.DetachedSignature, registry audittrust.Registry, expectedRootKeyID, expectedBundleSHA256 string, expectedMinRegistryRevision int, now time.Time) SignedAuditVerificationReport {
 	integrity := VerifyPortableAuditBundleExpected(bundle, expectedBundleSHA256)
 	trust := audittrust.VerifyExpected(registry, signature, expectedRootKeyID, integrity.BundleSHA256, expectedMinRegistryRevision, now)
+	return finalizeSignedAuditVerification(bundle, signature, integrity, trust)
+}
 
+func VerifySignedPortableAuditBundleWithTrustState(home string, bundle PortableAuditBundle, signature audittrust.DetachedSignature, registry audittrust.Registry, expectedBundleSHA256 string, now time.Time) (SignedAuditVerificationReport, audittrust.TrustState, error) {
+	state, err := audittrust.LoadTrustState(home)
+	if err != nil {
+		return SignedAuditVerificationReport{}, audittrust.TrustState{}, err
+	}
+	integrity := VerifyPortableAuditBundleExpected(bundle, expectedBundleSHA256)
+	trust := audittrust.VerifyExpectedFromTrustState(state, registry, signature, integrity.BundleSHA256, now)
+	report := finalizeSignedAuditVerification(bundle, signature, integrity, trust)
+	if !report.Valid {
+		return report, state, nil
+	}
+	advanced, err := audittrust.AdvanceTrustState(home, registry, now)
+	if err != nil {
+		report.Trust.Findings = append(report.Trust.Findings, audittrust.Finding{Code: "TRUST_STATE_ADVANCE_FAILED", Message: err.Error()})
+		report.Trust.Valid = false
+		report.Trust.Verdict = "fail"
+		report.Valid = false
+		report.Verdict = "fail"
+		return report, state, nil
+	}
+	return report, advanced, nil
+}
+
+func finalizeSignedAuditVerification(bundle PortableAuditBundle, signature audittrust.DetachedSignature, integrity ProvenanceIntegrityReport, trust audittrust.VerificationReport) SignedAuditVerificationReport {
 	addTrustFinding := func(code, message string) {
 		trust.Findings = append(trust.Findings, audittrust.Finding{Code: code, Message: message})
 	}

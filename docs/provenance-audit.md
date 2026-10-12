@@ -99,3 +99,51 @@ Root-key compromise is intentionally not disguised as child-key rotation. Re-est
 ### Backward compatibility
 
 Unsigned `provenance-audit-bundle/v1` files and `agentdock audit verify --expect-sha256` remain valid P8 workflows. P9 adds authentication rather than changing P8 bundle hashing or persisted Task schema.
+
+## P10 verifier trust state and root continuity
+
+P10 moves the P9 revision floor from a value that callers must remember to pass on every verification into a verifier-owned `audit-trust-state/v1` file. The state is stored at `<AGENTDOCK_HOME>/audit-trust/trust-state-v1.json` and contains only the paired subject, the current public root anchor, the highest accepted trust-registry revision, and an update timestamp. It contains no audit private key, Task evidence, or Evolution evidence.
+
+Bootstrap remains an external trust decision:
+
+```
+agentdock audit trust-state bootstrap \
+  --trust-registry audit-trust.json \
+  --trust-root audit-root-sha256:<hex> \
+  --trust-revision <out-of-band-known-revision>
+```
+
+After bootstrap, the verifier can use its persisted state instead of supplying the root pin and revision floor on every bundle:
+
+```
+agentdock audit verify-signed-stateful bundle.json \
+  --signature bundle.sig.json \
+  --trust-registry audit-trust.json
+```
+
+A stateful verification performs the complete P8 bundle integrity check and P9 signature/bundle/task/review binding before it changes trust state. Only a fully passing verification may advance `highest_accepted_registry_revision`. A later registry with a lower revision fails closed as `TRUST_STATE_ROLLBACK`; an invalid bundle or cross-scope signature never advances the state.
+
+### Planned root rollover
+
+Child-key rotation and revocation remain P9 lifecycle operations under one root. Planned root-key replacement is a separate P10 operation. The signer emits `audit-root-continuity/v1`, whose statement binds the subject, previous root and registry revision, next root and registry revision, and issue time. The same statement must verify under both the previous root and the next root. A new root therefore cannot authenticate its own succession without the currently trusted root.
+
+```
+agentdock audit trust rollover-root \
+  --continuity root-continuity.json
+
+agentdock audit trust export --out audit-trust-next.json
+
+agentdock audit trust-state apply-rollover \
+  --continuity root-continuity.json \
+  --trust-registry audit-trust-next.json
+```
+
+Before the signer replaces its stored root, AgentDock atomically persists a local recovery copy at `<AGENTDOCK_HOME>/audit-trust/root-continuity-r<old>-r<new>.json`. This prevents an output-path failure from destroying the only bridge after the old root private key has been replaced. The verifier accepts rollover only when the continuity document starts exactly from its current anchor and highest accepted revision, both root signatures verify, and the supplied next registry is signed by and names the declared next root.
+
+Suspected root compromise is not a planned rollover. It uses the explicit `agentdock audit trust-state rebootstrap ...` recovery path with a newly distributed out-of-band root pin and revision. Ordinary `bootstrap` refuses to overwrite existing verifier state.
+
+P10 does not add a `task_manage` write action and does not modify Task, execution-evidence, or Evolution persistence. It changes only verifier trust-state persistence and process-level audit verification/authority-continuity commands.
+
+### P10 backward compatibility
+
+P9 explicit-pin `verify-signed` and `task_manage action=verify_signed_audit_bundle` remain valid and unchanged. P10 is additive: callers that do not opt into verifier trust state continue to use the P8/P9 contracts exactly as before.

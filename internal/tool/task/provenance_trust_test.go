@@ -231,3 +231,99 @@ func TestTaskManageSignedAuditExportAndVerify(t *testing.T) {
 		t.Fatalf("stale trust registry was accepted: %#v", staleReport)
 	}
 }
+
+func TestStatefulSignedAuditVerificationAdvancesOnlyAfterFullBundleBindingPasses(t *testing.T) {
+	fixture := newP8Fixture(t)
+	exported, err := fixture.service.manageTest(context.Background(), map[string]any{
+		"action": "export_audit_bundle", "task_id": fixture.taskID, "review_revision": fixture.revision,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle := exported["audit_bundle"].(PortableAuditBundle)
+
+	signerHome := t.TempDir()
+	verifierHome := t.TempDir()
+	base := time.Date(2026, 10, 12, 13, 0, 0, 0, time.UTC)
+	registryV1, err := audittrust.Init(signerHome, audittrust.Subject{NodeID: "node_p10_stateful", DeviceID: "device_p10_stateful"}, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := audittrust.BootstrapTrustState(verifierHome, registryV1, registryV1.RootKeyID, registryV1.Revision, base); err != nil {
+		t.Fatal(err)
+	}
+
+	registryV2, err := audittrust.Rotate(signerHome, base.Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrongScope, err := audittrust.Sign(signerHome, audittrust.SignInput{
+		BundleContract: bundle.Contract,
+		BundleSHA256:   bundle.Manifest.BundleSHA256,
+		TaskID:         "tsk_wrong_scope",
+		ReviewRevision: bundle.Manifest.ReviewRevision,
+	}, base.Add(2*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, state, err := VerifySignedPortableAuditBundleWithTrustState(
+		verifierHome, bundle, wrongScope, registryV2, bundle.Manifest.BundleSHA256, base.Add(3*time.Minute),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Valid || !hasTrustFinding(report, "SIGNED_TASK_SCOPE_MISMATCH") {
+		t.Fatalf("wrong task scope was accepted: %#v", report)
+	}
+	if state.HighestAcceptedRegistryRevision != registryV1.Revision {
+		t.Fatalf("failed verification advanced trust state to %d", state.HighestAcceptedRegistryRevision)
+	}
+	persisted, err := audittrust.LoadTrustState(verifierHome)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted.HighestAcceptedRegistryRevision != registryV1.Revision {
+		t.Fatalf("failed verification persisted revision %d", persisted.HighestAcceptedRegistryRevision)
+	}
+
+	correct, err := audittrust.Sign(signerHome, audittrust.SignInput{
+		BundleContract: bundle.Contract,
+		BundleSHA256:   bundle.Manifest.BundleSHA256,
+		TaskID:         bundle.Manifest.TaskID,
+		ReviewRevision: bundle.Manifest.ReviewRevision,
+	}, base.Add(4*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, state, err = VerifySignedPortableAuditBundleWithTrustState(
+		verifierHome, bundle, correct, registryV2, bundle.Manifest.BundleSHA256, base.Add(5*time.Minute),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.Valid || state.HighestAcceptedRegistryRevision != registryV2.Revision {
+		t.Fatalf("valid stateful verification did not advance state: report=%#v state=%#v", report, state)
+	}
+
+	staleSignature, err := audittrust.Sign(signerHome, audittrust.SignInput{
+		BundleContract: bundle.Contract,
+		BundleSHA256:   bundle.Manifest.BundleSHA256,
+		TaskID:         bundle.Manifest.TaskID,
+		ReviewRevision: bundle.Manifest.ReviewRevision,
+	}, base.Add(6*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, state, err = VerifySignedPortableAuditBundleWithTrustState(
+		verifierHome, bundle, staleSignature, registryV1, bundle.Manifest.BundleSHA256, base.Add(7*time.Minute),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Valid || !hasTrustFinding(report, "TRUST_STATE_ROLLBACK") {
+		t.Fatalf("stale registry replay was accepted: %#v", report)
+	}
+	if state.HighestAcceptedRegistryRevision != registryV2.Revision {
+		t.Fatalf("stale replay changed trust state: %#v", state)
+	}
+}

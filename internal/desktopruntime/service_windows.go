@@ -71,13 +71,66 @@ func startCore(ctx context.Context, manifest Manifest, runtimeRoot string) error
 		return nil
 	}
 	if manifest.UsesScheduledTask() {
-		if err := runScheduledTaskCommand(ctx, "/Run", "/TN", scheduledTaskPath(manifest.AgentDockTaskName)); err != nil {
-			return err
-		}
+		return startScheduledCore(ctx, manifest, 45*time.Second)
 	} else if err := startDetachedCore(manifest, runtimeRoot); err != nil {
 		return err
 	}
 	return waitForHealth(ctx, manifest.HealthURL(), 45*time.Second)
+}
+
+func startScheduledCore(ctx context.Context, manifest Manifest, timeout time.Duration) error {
+	taskPath := scheduledTaskPath(manifest.AgentDockTaskName)
+	return retryScheduledTaskStart(
+		ctx,
+		timeout,
+		time.Second,
+		func() error {
+			return runScheduledTaskCommand(ctx, "/Run", "/TN", taskPath)
+		},
+		func() bool {
+			return testHealth(ctx, manifest.HealthURL())
+		},
+		manifest.HealthURL(),
+	)
+}
+
+func retryScheduledTaskStart(
+	ctx context.Context,
+	timeout time.Duration,
+	retryDelay time.Duration,
+	runTask func() error,
+	healthy func() bool,
+	healthURL string,
+) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if healthy() {
+			return nil
+		}
+		// The installed task uses MultipleInstancesPolicy=IgnoreNew. Immediately
+		// after /End, Task Scheduler can still report the old tray wrapper as
+		// Running even though the Core process has already exited. A single /Run
+		// in that window succeeds at the CLI level but is silently ignored.
+		// Retry /Run until either the task is actually startable or health returns.
+		if err := runTask(); err != nil {
+			return err
+		}
+		probeUntil := time.Now().Add(retryDelay)
+		if probeUntil.After(deadline) {
+			probeUntil = deadline
+		}
+		for time.Now().Before(probeUntil) {
+			if healthy() {
+				return nil
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(min(100*time.Millisecond, retryDelay)):
+			}
+		}
+	}
+	return fmt.Errorf("AgentDock 健康检查失败: %s", healthURL)
 }
 
 func stopCore(ctx context.Context, manifest Manifest, runtimeRoot string) error {

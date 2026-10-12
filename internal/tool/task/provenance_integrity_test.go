@@ -329,3 +329,68 @@ func findingCode(report ProvenanceIntegrityReport, code string) bool {
 	}
 	return false
 }
+
+func TestPortableAuditEmptyComponentSetsSurviveJSONRoundTrip(t *testing.T) {
+	service, _ := newTaskTestService(t)
+	service.evolution = &provenanceEvolutionStub{}
+	created, err := service.manageTest(context.Background(), map[string]any{
+		"action": "create", "title": "empty component portability", "goal": "round-trip empty audit sets",
+		"completion_conditions": []string{"portable audit survives JSON serialization"},
+		"steps":                 []map[string]any{{"id": "verify", "title": "Verify portability"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskID := created["task_id"].(string)
+	refs := []string{"commit://agentdock/empty-set", "test://audit/empty-set-roundtrip"}
+	if _, err := service.manageTest(context.Background(), map[string]any{
+		"action": "checkpoint", "task_id": taskID, "step_id": "verify", "status": "completed", "summary": "verified",
+		"execution_evidence": map[string]any{"evidence_refs": refs},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	claim := "empty audit component sets remain portable"
+	reviewed, err := service.manageTest(context.Background(), map[string]any{
+		"action": "final_review", "task_id": taskID, "status": "pass", "summary": "portable",
+		"verified":          []string{claim},
+		"verified_evidence": []map[string]any{{"claim": claim, "step_id": "verify", "evidence_refs": refs}},
+		"intent_spec": map[string]any{
+			"status": "pass", "evidence": []string{"portable semantics preserved"},
+			"evidence_bindings": []map[string]any{{"claim": "portable semantics preserved", "step_id": "verify", "evidence_refs": refs}},
+		},
+		"engineering_policy": map[string]any{
+			"status": "pass", "evidence": []string{"offline verification remains deterministic"},
+			"evidence_bindings": []map[string]any{{"claim": "offline verification remains deterministic", "step_id": "verify", "evidence_refs": refs}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision := reviewed["review_revision"].(string)
+	exported, err := service.manageTest(context.Background(), map[string]any{
+		"action": "export_audit_bundle", "task_id": taskID, "review_revision": revision,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundleValue, ok := exported["audit_bundle"]
+	if !ok {
+		t.Fatalf("empty-set export failed before serialization: %#v", exported["integrity"])
+	}
+	bundle := bundleValue.(PortableAuditBundle)
+	if len(bundle.ExecutionReceipts) != 0 || len(bundle.ExecutionClaims) != 0 || len(bundle.EvolutionRecords) != 0 {
+		t.Fatalf("expected empty audit component sets: %#v", bundle)
+	}
+	data, err := json.Marshal(bundle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var roundTripped PortableAuditBundle
+	if err := json.Unmarshal(data, &roundTripped); err != nil {
+		t.Fatal(err)
+	}
+	report := VerifyPortableAuditBundleExpected(roundTripped, bundle.Manifest.BundleSHA256)
+	if !report.Valid {
+		t.Fatalf("round-tripped empty-set bundle failed verification: %#v", report)
+	}
+}

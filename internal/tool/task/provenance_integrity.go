@@ -228,13 +228,13 @@ func (s *Service) buildPortableAuditBundle(ctx context.Context, taskID, expected
 	if manifest.TaskSHA256, err = digestJSON(task); err != nil {
 		return PortableAuditBundle{}, err
 	}
-	if manifest.ReceiptsSHA256, err = digestJSON(receipts); err != nil {
+	if manifest.ReceiptsSHA256, err = digestCanonicalSlice(receipts); err != nil {
 		return PortableAuditBundle{}, err
 	}
-	if manifest.ClaimsSHA256, err = digestJSON(claims); err != nil {
+	if manifest.ClaimsSHA256, err = digestCanonicalSlice(claims); err != nil {
 		return PortableAuditBundle{}, err
 	}
-	if manifest.EvolutionSHA256, err = digestJSON(evolutionRecords); err != nil {
+	if manifest.EvolutionSHA256, err = digestCanonicalSlice(evolutionRecords); err != nil {
 		return PortableAuditBundle{}, err
 	}
 	if manifest.GraphSHA256, err = digestJSON(graph); err != nil {
@@ -276,9 +276,9 @@ func VerifyPortableAuditBundle(bundle PortableAuditBundle) ProvenanceIntegrityRe
 	}
 
 	verifyComponentDigest(&report, "TASK_DIGEST_MISMATCH", bundle.Manifest.TaskSHA256, bundle.Task)
-	verifyComponentDigest(&report, "RECEIPT_SET_DIGEST_MISMATCH", bundle.Manifest.ReceiptsSHA256, bundle.ExecutionReceipts)
-	verifyComponentDigest(&report, "CLAIM_SET_DIGEST_MISMATCH", bundle.Manifest.ClaimsSHA256, bundle.ExecutionClaims)
-	verifyComponentDigest(&report, "EVOLUTION_SET_DIGEST_MISMATCH", bundle.Manifest.EvolutionSHA256, bundle.EvolutionRecords)
+	verifyCanonicalSliceDigest(&report, "RECEIPT_SET_DIGEST_MISMATCH", bundle.Manifest.ReceiptsSHA256, bundle.ExecutionReceipts)
+	verifyCanonicalSliceDigest(&report, "CLAIM_SET_DIGEST_MISMATCH", bundle.Manifest.ClaimsSHA256, bundle.ExecutionClaims)
+	verifyCanonicalSliceDigest(&report, "EVOLUTION_SET_DIGEST_MISMATCH", bundle.Manifest.EvolutionSHA256, bundle.EvolutionRecords)
 
 	bundleDigest, err := portableBundleDigest(bundle)
 	if err != nil {
@@ -649,6 +649,24 @@ func digestJSON(value any) (string, error) {
 	}
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:]), nil
+}
+
+func digestCanonicalSlice[T any](values []T) (string, error) {
+	if values == nil {
+		values = []T{}
+	}
+	return digestJSON(values)
+}
+
+func verifyCanonicalSliceDigest[T any](report *ProvenanceIntegrityReport, code, expected string, values []T) {
+	actual, err := digestCanonicalSlice(values)
+	if err != nil {
+		addIntegrityFinding(report, code, err.Error(), "", "")
+		return
+	}
+	if !digestEqual(expected, actual) {
+		addIntegrityFinding(report, code, "component digest does not match the manifest", "", "")
+	}
 }
 
 func verifyComponentDigest(report *ProvenanceIntegrityReport, code, expected string, value any) {

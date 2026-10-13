@@ -149,8 +149,8 @@ func (s *Server) registerTool(def ToolDefinition) {
 		Name:         def.Name,
 		Title:        def.Title,
 		Description:  def.Description,
-		InputSchema:  def.InputSchema,
-		OutputSchema: def.OutputSchema,
+		InputSchema:  openAICompatibleSchemaProjection(def.InputSchema),
+		OutputSchema: openAICompatibleSchemaProjection(def.OutputSchema),
 	}
 	if def.Annotations != nil {
 		tool.Annotations = &mcpsdk.ToolAnnotations{
@@ -259,8 +259,8 @@ func toolDescriptors(definitions []ToolDefinition, mcpAppsEnabled bool) []map[st
 			"name":         def.Name,
 			"title":        def.Title,
 			"description":  def.Description,
-			"inputSchema":  def.InputSchema,
-			"outputSchema": def.OutputSchema,
+			"inputSchema":  openAICompatibleSchemaProjection(def.InputSchema),
+			"outputSchema": openAICompatibleSchemaProjection(def.OutputSchema),
 		}
 		if def.Annotations != nil {
 			descriptor["annotations"] = map[string]any{

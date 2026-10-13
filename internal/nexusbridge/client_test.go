@@ -57,6 +57,18 @@ func TestBridgeHelloSeparatesToolsFromBridgeCapabilities(t *testing.T) {
 	}
 }
 
+func TestReconnectBackoffResetsAfterEstablishedSession(t *testing.T) {
+	retryIn, next := reconnectBackoffAfterAttempt(32*time.Second, true)
+	if retryIn != time.Second || next != 2*time.Second {
+		t.Fatalf("established session backoff = retry %s next %s, want 1s/2s", retryIn, next)
+	}
+
+	retryIn, next = reconnectBackoffAfterAttempt(32*time.Second, false)
+	if retryIn != 32*time.Second || next != 32*time.Second {
+		t.Fatalf("failed dial backoff = retry %s next %s, want 32s/32s", retryIn, next)
+	}
+}
+
 func TestBridgeWebSocketInvokeRecoveryAndShutdown(t *testing.T) {
 	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
 	helloCh := make(chan protocol.Message, 1)

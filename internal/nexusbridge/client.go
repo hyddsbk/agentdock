@@ -59,22 +59,33 @@ func (c *Client) Run(ctx context.Context) {
 	defer c.drainInvocations()
 	backoff := time.Second
 	for ctx.Err() == nil {
-		err := c.connect(ctx)
+		established, err := c.connect(ctx)
 		if ctx.Err() != nil {
 			return
 		}
-		slog.Warn("NexusDock connection lost", "error", err, "retry_in", backoff)
-		timer := time.NewTimer(backoff + time.Duration(rand.IntN(500))*time.Millisecond)
+		retryIn, nextBackoff := reconnectBackoffAfterAttempt(backoff, established)
+		slog.Warn("NexusDock connection lost", "error", err, "retry_in", retryIn)
+		timer := time.NewTimer(retryIn + time.Duration(rand.IntN(500))*time.Millisecond)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
 			return
 		case <-timer.C:
 		}
-		if backoff < 30*time.Second {
-			backoff *= 2
-		}
+		backoff = nextBackoff
 	}
+}
+
+func reconnectBackoffAfterAttempt(current time.Duration, established bool) (retryIn, next time.Duration) {
+	if established || current <= 0 {
+		current = time.Second
+	}
+	retryIn = current
+	next = current
+	if next < 30*time.Second {
+		next *= 2
+	}
+	return retryIn, next
 }
 
 func (c *Client) drainInvocations() {
@@ -90,11 +101,11 @@ func (c *Client) drainInvocations() {
 	}
 }
 
-func (c *Client) connect(ctx context.Context) error {
+func (c *Client) connect(ctx context.Context) (bool, error) {
 	c.state.SetConnected(false)
 	endpoint, err := url.Parse(c.identity.Endpoint)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if endpoint.Scheme == "https" {
 		endpoint.Scheme = "wss"
@@ -106,9 +117,9 @@ func (c *Client) connect(ctx context.Context) error {
 	socket, response, err := websocket.DefaultDialer.DialContext(ctx, endpoint.String(), header)
 	if err != nil {
 		if response != nil {
-			return fmt.Errorf("连接 NexusDock（HTTP %d）: %w", response.StatusCode, err)
+			return false, fmt.Errorf("连接 NexusDock（HTTP %d）: %w", response.StatusCode, err)
 		}
-		return fmt.Errorf("连接 NexusDock: %w", err)
+		return false, fmt.Errorf("连接 NexusDock: %w", err)
 	}
 	defer socket.Close()
 	// gorilla/websocket 的阻塞读取不会自动观察 context；父 Context 取消时主动关闭连接，
@@ -120,20 +131,20 @@ func (c *Client) connect(ctx context.Context) error {
 	tools := c.node.ToolNames()
 	descriptors, err := bridgeToolDescriptors(c.node.ToolDescriptors())
 	if err != nil {
-		return err
+		return false, err
 	}
 	if err := c.write(socket, protocol.Message{
 		Type: protocol.MessageNodeHello, ProtocolVersion: protocol.ConnectionProtocolVersion,
 		Hello: bridgeHello(c.identity, tools, descriptors, c.node.UIResources(), c.node.ToolContractHash()),
 	}); err != nil {
-		return err
+		return false, err
 	}
 	var ready protocol.Message
 	if err := socket.ReadJSON(&ready); err != nil {
-		return fmt.Errorf("读取 NexusDock 握手响应: %w", err)
+		return false, fmt.Errorf("读取 NexusDock 握手响应: %w", err)
 	}
 	if ready.Type != protocol.MessageNodeReady || ready.ProtocolVersion != protocol.ConnectionProtocolVersion {
-		return errors.New("NexusDock 返回了不兼容的节点协议")
+		return false, errors.New("NexusDock 返回了不兼容的节点协议")
 	}
 	c.state.SetConnected(true)
 	defer c.state.SetConnected(false)
@@ -148,7 +159,7 @@ func (c *Client) connect(ctx context.Context) error {
 	for {
 		var incoming protocol.Message
 		if err := socket.ReadJSON(&incoming); err != nil {
-			return err
+			return true, err
 		}
 		switch incoming.Type {
 		case protocol.MessageToolInvoke:

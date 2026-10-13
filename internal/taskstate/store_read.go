@@ -100,6 +100,9 @@ func (s *Store) saveLocked(task Task) error {
 	if err := validateID(task.ID); err != nil {
 		return err
 	}
+	if task.SchemaVersion != SchemaVersion {
+		return fmt.Errorf("refusing to persist task schema version %d; current writable schema is %d", task.SchemaVersion, SchemaVersion)
+	}
 	if len(task.Events) > maxTaskEvents {
 		task.Events = append([]Event(nil), task.Events[len(task.Events)-maxTaskEvents:]...)
 	}

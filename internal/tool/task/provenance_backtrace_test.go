@@ -210,7 +210,4 @@ func TestTaskManageSchemaPublishesBacktraceContract(t *testing.T) {
 	if !found {
 		t.Fatalf("task_manage schema action enum = %#v", allowed)
 	}
-	if taskstate.SchemaVersion != 10 {
-		t.Fatalf("P7 read-side contract must not bump task persistence schema: %d", taskstate.SchemaVersion)
-	}
 }

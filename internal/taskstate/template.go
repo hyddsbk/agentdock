@@ -120,6 +120,7 @@ type TaskStep struct {
 	Quality              *StepQuality        `json:"quality,omitempty"`
 	Diagnostic           *DiagnosticEvidence `json:"diagnostic,omitempty"`
 	ExecutionEvidence    *ExecutionEvidence  `json:"execution_evidence,omitempty"`
+	EvidenceRecords      []EvidenceRecord    `json:"evidence_records,omitempty"`
 	Status               string              `json:"status"`
 	UpdatedAt            time.Time           `json:"updated_at"`
 }

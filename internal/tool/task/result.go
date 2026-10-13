@@ -61,6 +61,9 @@ func compactTaskSummary(task taskstate.Task) map[string]any {
 		if step.ExecutionEvidence != nil {
 			item["execution_evidence"] = step.ExecutionEvidence
 		}
+		if len(step.EvidenceRecords) > 0 {
+			item["evidence_records"] = step.EvidenceRecords
+		}
 		if refs := taskstate.OutcomeEvidenceRefs(step); len(refs) > 0 {
 			item["outcome_evidence_refs"] = refs
 		}
@@ -101,6 +104,14 @@ func compactTaskSummary(task taskstate.Task) map[string]any {
 		"ready_step_count": len(readyFrontier), "ready_frontier": readyFrontier,
 		"condition_count": len(task.Conditions), "condition_refs": conditionRefs, "review_status": reviewStatus(task),
 		"updated_at": task.UpdatedAt,
+	}
+	if len(task.Unknowns) > 0 {
+		openUnknowns := compactOpenUnknowns(task)
+		summary["unknown_count"] = len(task.Unknowns)
+		summary["open_unknown_count"] = len(openUnknowns)
+		if len(openUnknowns) > 0 {
+			summary["open_unknowns"] = openUnknowns
+		}
 	}
 	if currentStep != nil {
 		summary["current_step"] = currentStep
@@ -143,6 +154,9 @@ func compactTaskSummary(task taskstate.Task) map[string]any {
 		}
 		if task.FinalReview.Provenance != nil {
 			review["provenance"] = task.FinalReview.Provenance
+		}
+		if len(task.FinalReview.AcknowledgedUnknownIDs) > 0 {
+			review["acknowledged_unknown_ids"] = append([]string(nil), task.FinalReview.AcknowledgedUnknownIDs...)
 		}
 		summary["final_review"] = review
 	}
@@ -190,6 +204,9 @@ func compactResumeContext(task taskstate.Task) map[string]any {
 		if step.ExecutionEvidence != nil {
 			item["execution_evidence"] = step.ExecutionEvidence
 		}
+		if len(step.EvidenceRecords) > 0 {
+			item["evidence_records"] = step.EvidenceRecords
+		}
 		if refs := taskstate.OutcomeEvidenceRefs(step); len(refs) > 0 {
 			item["outcome_evidence_refs"] = refs
 		}
@@ -225,6 +242,9 @@ func compactResumeContext(task taskstate.Task) map[string]any {
 		"handoff_revision": task.Handoff.Revision,
 		"created_at":       task.Handoff.CreatedAt,
 	}
+	if openUnknowns := compactOpenUnknowns(task); len(openUnknowns) > 0 {
+		resume["open_unknowns"] = openUnknowns
+	}
 	if nextStep != nil {
 		resume["next_step"] = nextStep
 	}
@@ -254,6 +274,21 @@ func reviewStatus(task taskstate.Task) string {
 		return "not_started"
 	}
 	return task.FinalReview.Status
+}
+
+func compactOpenUnknowns(task taskstate.Task) []map[string]any {
+	out := make([]map[string]any, 0)
+	for _, unknown := range task.Unknowns {
+		if unknown.Status != taskstate.UnknownStatusOpen {
+			continue
+		}
+		out = append(out, map[string]any{
+			"id": unknown.ID, "question": truncateString(unknown.Question, 240),
+			"status": unknown.Status, "revision": unknown.Revision, "blocking": unknown.Blocking,
+			"opened_step_id": unknown.OpenedStepID,
+		})
+	}
+	return out
 }
 
 func templateMatchRecommendation(candidates []taskstate.TemplateCandidate) map[string]any {

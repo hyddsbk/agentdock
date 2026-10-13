@@ -15,17 +15,19 @@ func (s *Service) checkpointWithReceiptEvidence(
 	executionReceipts []ExecutionReceiptRequest,
 	diagnostic *taskstate.DiagnosticEvidence,
 	legacyEvidence *taskstate.ExecutionEvidence,
+	evidenceRecords []taskstate.EvidenceRecordInput,
+	unknownUpdates []taskstate.UnknownUpdate,
 ) (taskstate.Task, error) {
 	if tddRequest != nil && len(executionReceipts) > 0 {
 		return taskstate.Task{}, errors.New("tdd_seam and execution_receipts cannot be combined")
 	}
 	if tddRequest != nil {
-		return s.checkpointWithTDDReceipts(taskID, stepID, status, summary, tddRequest, diagnostic, legacyEvidence)
+		return s.checkpointWithTDDReceipts(taskID, stepID, status, summary, tddRequest, diagnostic, legacyEvidence, evidenceRecords, unknownUpdates)
 	}
 	if len(executionReceipts) == 0 {
-		return s.tasks.CheckpointWithEvidence(taskID, stepID, status, summary, diagnostic, legacyEvidence)
+		return s.tasks.CheckpointWithEvidenceTDDAndSemantics(taskID, stepID, status, summary, diagnostic, legacyEvidence, nil, evidenceRecords, unknownUpdates)
 	}
-	return s.checkpointWithExecutionReceipts(taskID, stepID, status, summary, executionReceipts, diagnostic, legacyEvidence)
+	return s.checkpointWithExecutionReceipts(taskID, stepID, status, summary, executionReceipts, diagnostic, legacyEvidence, evidenceRecords, unknownUpdates)
 }
 
 func (s *Service) checkpointWithExecutionReceipts(
@@ -33,6 +35,8 @@ func (s *Service) checkpointWithExecutionReceipts(
 	requests []ExecutionReceiptRequest,
 	diagnostic *taskstate.DiagnosticEvidence,
 	legacyEvidence *taskstate.ExecutionEvidence,
+	evidenceRecords []taskstate.EvidenceRecordInput,
+	unknownUpdates []taskstate.UnknownUpdate,
 ) (taskstate.Task, error) {
 	if status != taskstate.StepCompleted {
 		return taskstate.Task{}, errors.New("execution_receipts are only valid for completed checkpoints")
@@ -92,7 +96,7 @@ func (s *Service) checkpointWithExecutionReceipts(
 		if err != nil {
 			return err
 		}
-		updated, err = s.tasks.CheckpointWithEvidenceAndTDD(taskID, stepID, status, summary, diagnostic, evidence, nil)
+		updated, err = s.tasks.CheckpointWithEvidenceTDDAndSemantics(taskID, stepID, status, summary, diagnostic, evidence, nil, evidenceRecords, unknownUpdates)
 		return err
 	})
 	if err != nil {

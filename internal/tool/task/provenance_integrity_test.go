@@ -286,9 +286,6 @@ func TestLiveProvenanceRevalidationDetectsReceiptAndLinkTampering(t *testing.T) 
 }
 
 func TestP8AuditActionsRemainReadOnlyAndDoNotBumpTaskSchema(t *testing.T) {
-	if taskstate.SchemaVersion != 10 {
-		t.Fatalf("P8 query-side contract must not bump task persistence schema: %d", taskstate.SchemaVersion)
-	}
 	fixture := newP8Fixture(t)
 	before, err := fixture.service.manageTest(context.Background(), map[string]any{"action": "get", "task_id": fixture.taskID})
 	if err != nil {

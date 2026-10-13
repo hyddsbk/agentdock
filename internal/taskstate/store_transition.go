@@ -27,6 +27,17 @@ func (s *Store) CheckpointWithTDD(id, stepID, status, summary string, evidence *
 }
 
 func (s *Store) CheckpointWithEvidenceAndTDD(id, stepID, status, summary string, diagnostic *DiagnosticEvidence, executionEvidence *ExecutionEvidence, tddEvidence *TDDSeam) (Task, error) {
+	return s.CheckpointWithEvidenceTDDAndSemantics(id, stepID, status, summary, diagnostic, executionEvidence, tddEvidence, nil, nil)
+}
+
+func (s *Store) CheckpointWithEvidenceTDDAndSemantics(
+	id, stepID, status, summary string,
+	diagnostic *DiagnosticEvidence,
+	executionEvidence *ExecutionEvidence,
+	tddEvidence *TDDSeam,
+	evidenceRecords []EvidenceRecordInput,
+	unknownUpdates []UnknownUpdate,
+) (Task, error) {
 	return s.mutate(id, func(task *Task, now time.Time) error {
 		if err := requireActive(task); err != nil {
 			return err
@@ -58,6 +69,9 @@ func (s *Store) CheckpointWithEvidenceAndTDD(id, stepID, status, summary string,
 			return fmt.Errorf("task step %s not found", stepID)
 		}
 		step := &task.Steps[stepIndex]
+		if (len(evidenceRecords) > 0 || len(unknownUpdates) > 0) && status == StepPending {
+			return errors.New("evidence_records and unknown_updates require an in_progress or completed checkpoint")
+		}
 		if tddEvidence != nil && status != StepCompleted {
 			return errors.New("tdd evidence requires completed checkpoint status")
 		}
@@ -105,7 +119,7 @@ func (s *Store) CheckpointWithEvidenceAndTDD(id, stepID, status, summary string,
 			}
 			step.ExecutionEvidence = normalized
 		}
-		if step.Status == status && task.Summary == summary && diagnostic == nil && executionEvidence == nil && tddEvidence == nil {
+		if step.Status == status && task.Summary == summary && diagnostic == nil && executionEvidence == nil && tddEvidence == nil && len(evidenceRecords) == 0 && len(unknownUpdates) == 0 {
 			return nil
 		}
 		if !validStepTransition(step.Status, status) {
@@ -116,10 +130,13 @@ func (s *Store) CheckpointWithEvidenceAndTDD(id, stepID, status, summary string,
 				return fmt.Errorf("step %s is blocked by incomplete dependencies: %s", step.ID, strings.Join(blocked, ", "))
 			}
 		}
+		if status == StepCompleted && tddEvidence != nil {
+			step.TDD = tddEvidence
+		}
+		if err := applyEvidenceSemantics(task, step, evidenceRecords, unknownUpdates, now); err != nil {
+			return err
+		}
 		if status == StepCompleted {
-			if tddEvidence != nil {
-				step.TDD = tddEvidence
-			}
 			if step.ExecutionContract != nil {
 				if err := step.ExecutionContract.ValidateCompletion(step.ExecutionEvidence); err != nil {
 					return err
@@ -357,6 +374,10 @@ func applyFinalReview(task *Task, input FinalReviewInput, now time.Time) error {
 	if err != nil {
 		return err
 	}
+	acknowledgedUnknownIDs, err := normalizeAcknowledgedUnknownIDs(*task, status, input.AcknowledgedUnknownIDs)
+	if err != nil {
+		return err
+	}
 	if intentSpec == nil || engineeringPolicy == nil {
 		return errors.New("final review requires both intent_spec and engineering_policy outcome axes")
 	}
@@ -393,7 +414,7 @@ func applyFinalReview(task *Task, input FinalReviewInput, now time.Time) error {
 		return err
 	}
 	clearHandoff(task)
-	task.FinalReview = &FinalReview{Status: status, Summary: summary, VerifiedFacts: verifiedFacts, OpenRisks: openRisks, MissingChecks: missingChecks, IntentSpec: intentSpec, EngineeringPolicy: engineeringPolicy, Traceability: traceability, Provenance: provenance, ReviewRevision: reviewRevision, ReviewedAt: now}
+	task.FinalReview = &FinalReview{Status: status, Summary: summary, VerifiedFacts: verifiedFacts, AcknowledgedUnknownIDs: acknowledgedUnknownIDs, OpenRisks: openRisks, MissingChecks: missingChecks, IntentSpec: intentSpec, EngineeringPolicy: engineeringPolicy, Traceability: traceability, Provenance: provenance, ReviewRevision: reviewRevision, ReviewedAt: now}
 	task.EvolutionCandidates = nil
 	if status == FinalReviewPass {
 		task.Phase = PhaseCloseout

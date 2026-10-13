@@ -11,38 +11,41 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 	stringProp := toolcontract.String
 	boundedIntProp := toolcontract.BoundedInteger
 	props := map[string]any{
-		"action":                  map[string]any{"type": "string", "description": "Task lifecycle and read-only audit action. Use checkpoint to update progress and handoff to persist a fresh-session resume packet.", "enum": []string{"create", "list", "get", "backtrace", "revalidate", "export_audit_bundle", "verify_audit_bundle", "export_signed_audit_bundle", "verify_signed_audit_bundle", "verify_signed_audit_bundle_online", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}},
-		"task_id":                 stringProp("Persistent task id for get, backtrace scope, revalidate, export_audit_bundle, checkpoint, block, resume, handoff, final_review, or complete."),
-		"title":                   stringProp("Short task title. Required for action=create."),
-		"goal":                    stringProp("Fixed task goal. Required for action=create."),
-		"completion_conditions":   map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string"}, "description": "Conditions that must be true before final_review can pass. Required for action=create."},
-		"requirement_refs":        map[string]any{"type": "array", "maxItems": 32, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Optional authoritative requirement/spec pointers for traceable work. Every ref must be mapped by at least one step; do not copy spec prose here."},
-		"step_id":                 stringProp("Task step id for a single-step checkpoint."),
-		"tdd_seam":                tddSeamInputSchema(),
-		"completed_step_ids":      map[string]any{"type": "array", "minItems": 1, "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Task step ids to mark completed in one atomic batch checkpoint."},
-		"current_step_id":         stringProp("Single task step id to mark in_progress in a batch checkpoint."),
-		"next_step_id":            stringProp("For handoff, the in-progress or dependency-ready step the next session should continue. Leave empty only for tasks with no steps."),
-		"context_refs":            map[string]any{"type": "array", "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "For handoff, compact pointers to authoritative context the next session should load; do not duplicate the source content."},
-		"status":                  map[string]any{"type": "string", "description": "Action-specific status: task list filter, single-step checkpoint status, or final review status.", "enum": []string{"active", "blocked", "completed", "pending", "in_progress", "pass", "failed"}},
-		"limit":                   boundedIntProp("Maximum tasks returned by list. Defaults to 50 and is capped at 200.", 1, 200),
-		"summary":                 stringProp("Current progress, blocker, resume, handoff orientation, or final review summary."),
-		"diagnostic":              diagnosticEvidenceSchema(),
-		"execution_evidence":      executionEvidenceSchema(),
-		"execution_receipts":      executionReceiptsInputSchema(),
-		"verified":                map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Facts verified during final_review. Required when status=pass."},
-		"verified_evidence":       reviewEvidenceBindingsSchema("Server-validated bindings for every verified fact in a passing final_review."),
-		"risks":                   map[string]any{"type": "array", "maxItems": 16, "items": map[string]any{"type": "string"}, "description": "Unresolved risks for handoff, or remaining risks for a failed final_review."},
-		"intent_spec":             outcomeAxisSchema("Intent/spec compliance outcome. Required for final_review."),
-		"engineering_policy":      outcomeAxisSchema("Engineering/policy compliance outcome. Required for final_review."),
-		"provenance_query":        provenanceQuerySchema(cfg.NexusEndpoint != ""),
-		"review_revision":         stringProp("Optional immutable final-review revision pin for revalidate/export_audit_bundle/export_signed_audit_bundle. A mismatch fails closed."),
-		"audit_bundle":            portableAuditBundleInputSchema(),
-		"audit_signature":         openAuditObjectSchema("Detached audit signature produced by the trusted AgentDock signer."),
-		"audit_trust_registry":    openAuditObjectSchema("Public root-signed audit trust registry used for independent verification."),
-		"audit_trust_checkpoint":  openAuditObjectSchema("Root-signed audit trust checkpoint used as the freshness authority for offline verification."),
-		"expected_root_key_id":    stringProp("Externally pinned audit root key id for explicit-pin signed audit verification. Online checkpoint verification uses the bootstrapped verifier trust state instead."),
-		"expected_trust_revision": boundedIntProp("Legacy P9 externally pinned minimum audit trust-registry revision. Omit when audit_trust_checkpoint supplies freshness.", 1, 2147483647),
-		"expected_bundle_sha256":  stringProp("Optional externally pinned P8 bundle SHA-256 for audit bundle verification actions."),
+		"action":                   map[string]any{"type": "string", "description": "Task lifecycle and read-only audit action. Use checkpoint to update progress and handoff to persist a fresh-session resume packet.", "enum": []string{"create", "list", "get", "backtrace", "revalidate", "export_audit_bundle", "verify_audit_bundle", "export_signed_audit_bundle", "verify_signed_audit_bundle", "verify_signed_audit_bundle_online", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}},
+		"task_id":                  stringProp("Persistent task id for get, backtrace scope, revalidate, export_audit_bundle, checkpoint, block, resume, handoff, final_review, or complete."),
+		"title":                    stringProp("Short task title. Required for action=create."),
+		"goal":                     stringProp("Fixed task goal. Required for action=create."),
+		"completion_conditions":    map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string"}, "description": "Conditions that must be true before final_review can pass. Required for action=create."},
+		"requirement_refs":         map[string]any{"type": "array", "maxItems": 32, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Optional authoritative requirement/spec pointers for traceable work. Every ref must be mapped by at least one step; do not copy spec prose here."},
+		"step_id":                  stringProp("Task step id for a single-step checkpoint."),
+		"tdd_seam":                 tddSeamInputSchema(),
+		"completed_step_ids":       map[string]any{"type": "array", "minItems": 1, "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Task step ids to mark completed in one atomic batch checkpoint."},
+		"current_step_id":          stringProp("Single task step id to mark in_progress in a batch checkpoint."),
+		"next_step_id":             stringProp("For handoff, the in-progress or dependency-ready step the next session should continue. Leave empty only for tasks with no steps."),
+		"context_refs":             map[string]any{"type": "array", "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "For handoff, compact pointers to authoritative context the next session should load; do not duplicate the source content."},
+		"status":                   map[string]any{"type": "string", "description": "Action-specific status: task list filter, single-step checkpoint status, or final review status.", "enum": []string{"active", "blocked", "completed", "pending", "in_progress", "pass", "failed"}},
+		"limit":                    boundedIntProp("Maximum tasks returned by list. Defaults to 50 and is capped at 200.", 1, 200),
+		"summary":                  stringProp("Current progress, blocker, resume, handoff orientation, or final review summary."),
+		"diagnostic":               diagnosticEvidenceSchema(),
+		"execution_evidence":       executionEvidenceSchema(),
+		"evidence_records":         evidenceRecordsInputSchema(),
+		"unknown_updates":          unknownUpdatesInputSchema(),
+		"execution_receipts":       executionReceiptsInputSchema(),
+		"verified":                 map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Facts verified during final_review. Required when status=pass."},
+		"verified_evidence":        reviewEvidenceBindingsSchema("Server-validated bindings for every verified fact in a passing final_review."),
+		"acknowledged_unknown_ids": map[string]any{"type": "array", "maxItems": 64, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Open non-blocking unknown ids explicitly carried through a passing final_review. Blocking unknowns can never be acknowledged past the gate."},
+		"risks":                    map[string]any{"type": "array", "maxItems": 16, "items": map[string]any{"type": "string"}, "description": "Unresolved risks for handoff, or remaining risks for a failed final_review."},
+		"intent_spec":              outcomeAxisSchema("Intent/spec compliance outcome. Required for final_review."),
+		"engineering_policy":       outcomeAxisSchema("Engineering/policy compliance outcome. Required for final_review."),
+		"provenance_query":         provenanceQuerySchema(cfg.NexusEndpoint != ""),
+		"review_revision":          stringProp("Optional immutable final-review revision pin for revalidate/export_audit_bundle/export_signed_audit_bundle. A mismatch fails closed."),
+		"audit_bundle":             portableAuditBundleInputSchema(),
+		"audit_signature":          openAuditObjectSchema("Detached audit signature produced by the trusted AgentDock signer."),
+		"audit_trust_registry":     openAuditObjectSchema("Public root-signed audit trust registry used for independent verification."),
+		"audit_trust_checkpoint":   openAuditObjectSchema("Root-signed audit trust checkpoint used as the freshness authority for offline verification."),
+		"expected_root_key_id":     stringProp("Externally pinned audit root key id for explicit-pin signed audit verification. Online checkpoint verification uses the bootstrapped verifier trust state instead."),
+		"expected_trust_revision":  boundedIntProp("Legacy P9 externally pinned minimum audit trust-registry revision. Omit when audit_trust_checkpoint supplies freshness.", 1, 2147483647),
+		"expected_bundle_sha256":   stringProp("Optional externally pinned P8 bundle SHA-256 for audit bundle verification actions."),
 	}
 
 	if cfg.NexusEndpoint == "" {
@@ -131,6 +134,44 @@ func executionEvidenceSchema() map[string]any {
 		"required": []string{"evidence_refs"},
 		"properties": map[string]any{
 			"evidence_refs": map[string]any{"type": "array", "minItems": 1, "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Opaque outcome pointers such as commit://, test://, artifact://, or issue://. Do not place exec:// receipt identities here; supply them through execution_receipts so AgentDock can claim and attest them."},
+		},
+	}
+}
+
+func evidenceRecordsInputSchema() map[string]any {
+	return map[string]any{
+		"type": "array", "maxItems": 16,
+		"description": "Provider-neutral semantic evidence appended atomically to one Task step. IDs and timestamps are server-owned.",
+		"items": map[string]any{
+			"type": "object", "additionalProperties": false, "required": []string{"statement", "fact_status", "coverage"},
+			"properties": map[string]any{
+				"statement":         map[string]any{"type": "string", "description": "One evidence-backed statement; keep observations separate from inference."},
+				"fact_status":       map[string]any{"type": "string", "enum": []string{"observed", "derived", "inferred", "unknown", "contradicted"}, "description": "Semantic status of the statement."},
+				"source_refs":       map[string]any{"type": "array", "maxItems": 16, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Opaque source/evidence pointers supporting this record. Required for every fact_status except unknown."},
+				"coverage":          map[string]any{"type": "string", "enum": []string{"complete", "partial", "unknown"}, "description": "Coverage of the evidence producer for this statement. Missing or partial coverage is not absence."},
+				"limitations":       map[string]any{"type": "array", "maxItems": 8, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Known boundaries or caveats that constrain the statement."},
+				"untrusted_content": map[string]any{"type": "boolean", "description": "True when source material may contain target-controlled instructions or other untrusted content."},
+				"partial_result":    map[string]any{"type": "boolean", "description": "True when the producer returned useful but incomplete output. Cannot be combined with complete coverage."},
+			},
+		},
+	}
+}
+
+func unknownUpdatesInputSchema() map[string]any {
+	return map[string]any{
+		"type": "array", "maxItems": 16,
+		"description": "Revision-aware updates to the Task-owned unknown ledger. Opening records uncertainty; resolving requires current revision plus evidence owned by this step.",
+		"items": map[string]any{
+			"type": "object", "additionalProperties": false, "required": []string{"action"},
+			"properties": map[string]any{
+				"action":            map[string]any{"type": "string", "enum": []string{"open", "resolve"}},
+				"unknown_id":        map[string]any{"type": "string", "description": "Server-issued unk_ id. Required only for resolve."},
+				"expected_revision": map[string]any{"type": "integer", "minimum": 1, "description": "Optimistic-concurrency revision required for resolve."},
+				"question":          map[string]any{"type": "string", "description": "Unresolved question. Required only for open."},
+				"blocking":          map[string]any{"type": "boolean", "description": "When true, the unknown must be resolved before final_review can pass."},
+				"evidence_refs":     map[string]any{"type": "array", "maxItems": 16, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Supporting refs for open, or current-step-owned resolution refs for resolve."},
+				"resolution":        map[string]any{"type": "string", "description": "Evidence-backed resolution. Required only for resolve."},
+			},
 		},
 	}
 }

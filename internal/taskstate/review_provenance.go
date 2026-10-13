@@ -216,6 +216,11 @@ func stepOutcomeEvidenceRefs(step TaskStep) []string {
 			}
 		}
 	}
+	for _, record := range step.EvidenceRecords {
+		if validOpaqueEvidenceID(record.ID, "ev_") {
+			add("evidence://" + record.ID)
+		}
+	}
 	if step.TDD != nil {
 		for _, run := range []*TDDRun{step.TDD.Red, step.TDD.Green, step.TDD.Regression} {
 			if run != nil {

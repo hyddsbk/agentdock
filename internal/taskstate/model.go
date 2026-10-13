@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	SchemaVersion             = 10
+	SchemaVersion             = 11
 	legacySchemaVersion       = 1
 	dependencySchemaVersion   = 2
 	contextSchemaVersion      = 3
@@ -16,6 +16,7 @@ const (
 	traceabilitySchemaVersion = 7
 	tddSchemaVersion          = 8
 	executionSchemaVersion    = 9
+	outcomeSchemaVersion      = 10
 	FinalReviewPass           = "pass"
 	FinalReviewFailed         = "failed"
 
@@ -98,28 +99,30 @@ type Handoff struct {
 }
 
 type FinalReviewInput struct {
-	Status            string                  `json:"status"`
-	Summary           string                  `json:"summary"`
-	VerifiedFacts     []string                `json:"verified_facts,omitempty"`
-	VerifiedEvidence  []ReviewEvidenceBinding `json:"verified_evidence,omitempty"`
-	OpenRisks         []string                `json:"open_risks,omitempty"`
-	MissingChecks     []string                `json:"missing_checks,omitempty"`
-	IntentSpec        *OutcomeAxis            `json:"intent_spec,omitempty"`
-	EngineeringPolicy *OutcomeAxis            `json:"engineering_policy,omitempty"`
+	Status                 string                  `json:"status"`
+	Summary                string                  `json:"summary"`
+	VerifiedFacts          []string                `json:"verified_facts,omitempty"`
+	VerifiedEvidence       []ReviewEvidenceBinding `json:"verified_evidence,omitempty"`
+	AcknowledgedUnknownIDs []string                `json:"acknowledged_unknown_ids,omitempty"`
+	OpenRisks              []string                `json:"open_risks,omitempty"`
+	MissingChecks          []string                `json:"missing_checks,omitempty"`
+	IntentSpec             *OutcomeAxis            `json:"intent_spec,omitempty"`
+	EngineeringPolicy      *OutcomeAxis            `json:"engineering_policy,omitempty"`
 }
 
 type FinalReview struct {
-	Status            string                `json:"status"`
-	Summary           string                `json:"summary"`
-	VerifiedFacts     []string              `json:"verified_facts,omitempty"`
-	OpenRisks         []string              `json:"open_risks,omitempty"`
-	MissingChecks     []string              `json:"missing_checks,omitempty"`
-	IntentSpec        *OutcomeAxis          `json:"intent_spec,omitempty"`
-	EngineeringPolicy *OutcomeAxis          `json:"engineering_policy,omitempty"`
-	Traceability      *TraceabilityCoverage `json:"traceability,omitempty"`
-	Provenance        *OutcomeProvenance    `json:"provenance,omitempty"`
-	ReviewRevision    string                `json:"review_revision"`
-	ReviewedAt        time.Time             `json:"reviewed_at"`
+	Status                 string                `json:"status"`
+	Summary                string                `json:"summary"`
+	VerifiedFacts          []string              `json:"verified_facts,omitempty"`
+	AcknowledgedUnknownIDs []string              `json:"acknowledged_unknown_ids,omitempty"`
+	OpenRisks              []string              `json:"open_risks,omitempty"`
+	MissingChecks          []string              `json:"missing_checks,omitempty"`
+	IntentSpec             *OutcomeAxis          `json:"intent_spec,omitempty"`
+	EngineeringPolicy      *OutcomeAxis          `json:"engineering_policy,omitempty"`
+	Traceability           *TraceabilityCoverage `json:"traceability,omitempty"`
+	Provenance             *OutcomeProvenance    `json:"provenance,omitempty"`
+	ReviewRevision         string                `json:"review_revision"`
+	ReviewedAt             time.Time             `json:"reviewed_at"`
 }
 
 type Event struct {
@@ -150,6 +153,7 @@ type Task struct {
 	EvolutionGuidanceSeen []string               `json:"evolution_guidance_seen,omitempty"`
 	EvolutionCandidates   []EvolutionContextItem `json:"evolution_candidates,omitempty"`
 	EvolutionBindings     []EvolutionBinding     `json:"evolution_bindings,omitempty"`
+	Unknowns              []UnknownRecord        `json:"unknowns,omitempty"`
 	FinalReview           *FinalReview           `json:"final_review,omitempty"`
 	CreatedAt             time.Time              `json:"created_at"`
 	UpdatedAt             time.Time              `json:"updated_at"`

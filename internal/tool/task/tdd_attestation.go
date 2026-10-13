@@ -9,9 +9,16 @@ import (
 	"github.com/uvwt/agentdock/internal/taskstate"
 )
 
-func (s *Service) checkpointWithTDDReceipts(taskID, stepID, status, summary string, request *TDDSeamRequest, diagnostic *taskstate.DiagnosticEvidence, executionEvidence *taskstate.ExecutionEvidence) (taskstate.Task, error) {
+func (s *Service) checkpointWithTDDReceipts(
+	taskID, stepID, status, summary string,
+	request *TDDSeamRequest,
+	diagnostic *taskstate.DiagnosticEvidence,
+	executionEvidence *taskstate.ExecutionEvidence,
+	evidenceRecords []taskstate.EvidenceRecordInput,
+	unknownUpdates []taskstate.UnknownUpdate,
+) (taskstate.Task, error) {
 	if request == nil {
-		return s.tasks.CheckpointWithEvidence(taskID, stepID, status, summary, diagnostic, executionEvidence)
+		return s.tasks.CheckpointWithEvidenceTDDAndSemantics(taskID, stepID, status, summary, diagnostic, executionEvidence, nil, evidenceRecords, unknownUpdates)
 	}
 	if status != taskstate.StepCompleted {
 		return taskstate.Task{}, errors.New("tdd_seam is only valid for completed checkpoints")
@@ -52,7 +59,7 @@ func (s *Service) checkpointWithTDDReceipts(taskID, stepID, status, summary stri
 		if err != nil {
 			return err
 		}
-		updated, err = s.tasks.CheckpointWithEvidenceAndTDD(taskID, stepID, status, summary, diagnostic, executionEvidence, attested)
+		updated, err = s.tasks.CheckpointWithEvidenceTDDAndSemantics(taskID, stepID, status, summary, diagnostic, executionEvidence, attested, evidenceRecords, unknownUpdates)
 		return err
 	})
 	if err != nil {

@@ -16,45 +16,48 @@ var taskActions = []string{"create", "list", "get", "backtrace", "revalidate", "
 var workflowTemplateActions = []string{"publish", "retire", "list", "get", "get_many", "match", "vector_index"}
 
 type taskManageInput struct {
-	Action                string
-	Title                 string
-	Goal                  string
-	Project               string
-	Device                string
-	CompletionConditions  []string
-	RequirementRefs       []string
-	Steps                 []taskstate.TaskStepInput
-	TemplateID            string
-	SourceTemplateIDs     []string
-	LearningChecks        []taskstate.EvolutionBinding
-	Status                string
-	Limit                 int
-	TaskID                string
-	StepID                string
-	TDDSeam               *TDDSeamRequest
-	ExecutionReceipts     []ExecutionReceiptRequest
-	CompletedStepIDs      []string
-	CompletedStepIDsSet   bool
-	CurrentStepID         string
-	NextStepID            string
-	Summary               string
-	ContextRefs           []string
-	Diagnostic            *taskstate.DiagnosticEvidence
-	ExecutionEvidence     *taskstate.ExecutionEvidence
-	Verified              []string
-	VerifiedEvidence      []taskstate.ReviewEvidenceBinding
-	Risks                 []string
-	IntentSpec            *taskstate.OutcomeAxis
-	EngineeringPolicy     *taskstate.OutcomeAxis
-	ProvenanceQuery       *ProvenanceQueryRequest
-	ReviewRevision        string
-	AuditBundle           *PortableAuditBundle
-	AuditSignature        *audittrust.DetachedSignature
-	AuditTrustRegistry    *audittrust.Registry
-	AuditTrustCheckpoint  *audittrust.Checkpoint
-	ExpectedRootKeyID     string
-	ExpectedTrustRevision int
-	ExpectedBundleSHA256  string
+	Action                 string
+	Title                  string
+	Goal                   string
+	Project                string
+	Device                 string
+	CompletionConditions   []string
+	RequirementRefs        []string
+	Steps                  []taskstate.TaskStepInput
+	TemplateID             string
+	SourceTemplateIDs      []string
+	LearningChecks         []taskstate.EvolutionBinding
+	Status                 string
+	Limit                  int
+	TaskID                 string
+	StepID                 string
+	TDDSeam                *TDDSeamRequest
+	ExecutionReceipts      []ExecutionReceiptRequest
+	CompletedStepIDs       []string
+	CompletedStepIDsSet    bool
+	CurrentStepID          string
+	NextStepID             string
+	Summary                string
+	ContextRefs            []string
+	Diagnostic             *taskstate.DiagnosticEvidence
+	ExecutionEvidence      *taskstate.ExecutionEvidence
+	EvidenceRecords        []taskstate.EvidenceRecordInput
+	UnknownUpdates         []taskstate.UnknownUpdate
+	Verified               []string
+	VerifiedEvidence       []taskstate.ReviewEvidenceBinding
+	AcknowledgedUnknownIDs []string
+	Risks                  []string
+	IntentSpec             *taskstate.OutcomeAxis
+	EngineeringPolicy      *taskstate.OutcomeAxis
+	ProvenanceQuery        *ProvenanceQueryRequest
+	ReviewRevision         string
+	AuditBundle            *PortableAuditBundle
+	AuditSignature         *audittrust.DetachedSignature
+	AuditTrustRegistry     *audittrust.Registry
+	AuditTrustCheckpoint   *audittrust.Checkpoint
+	ExpectedRootKeyID      string
+	ExpectedTrustRevision  int
+	ExpectedBundleSHA256   string
 }
 
 type workflowTemplateInput struct {
@@ -102,43 +105,46 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 	}
 
 	input := taskManageInput{
-		Action:                strings.ToLower(strings.TrimSpace(request.Action)),
-		Title:                 request.Title,
-		Goal:                  request.Goal,
-		Project:               strings.ToLower(strings.TrimSpace(request.Project)),
-		Device:                strings.TrimSpace(request.Device),
-		CompletionConditions:  append([]string(nil), request.CompletionConditions...),
-		RequirementRefs:       append([]string(nil), request.RequirementRefs...),
-		Steps:                 steps,
-		TemplateID:            strings.TrimSpace(request.TemplateID),
-		SourceTemplateIDs:     append([]string(nil), request.SourceTemplateIDs...),
-		LearningChecks:        learningChecks,
-		Status:                strings.ToLower(strings.TrimSpace(request.Status)),
-		Limit:                 intValue(request.Limit, 50),
-		TaskID:                request.TaskID,
-		StepID:                request.StepID,
-		TDDSeam:               request.TDDSeam,
-		ExecutionReceipts:     append([]ExecutionReceiptRequest(nil), request.ExecutionReceipts...),
-		CurrentStepID:         request.CurrentStepID,
-		NextStepID:            request.NextStepID,
-		Summary:               request.Summary,
-		ContextRefs:           append([]string(nil), request.ContextRefs...),
-		Diagnostic:            request.Diagnostic,
-		ExecutionEvidence:     executionEvidence,
-		Verified:              append([]string(nil), request.Verified...),
-		VerifiedEvidence:      append([]taskstate.ReviewEvidenceBinding(nil), request.VerifiedEvidence...),
-		Risks:                 append([]string(nil), request.Risks...),
-		IntentSpec:            request.IntentSpec,
-		EngineeringPolicy:     request.EngineeringPolicy,
-		ProvenanceQuery:       request.ProvenanceQuery,
-		ReviewRevision:        strings.TrimSpace(request.ReviewRevision),
-		AuditBundle:           request.AuditBundle,
-		AuditSignature:        request.AuditSignature,
-		AuditTrustRegistry:    request.AuditTrustRegistry,
-		AuditTrustCheckpoint:  request.AuditTrustCheckpoint,
-		ExpectedRootKeyID:     strings.TrimSpace(request.ExpectedRootKeyID),
-		ExpectedTrustRevision: request.ExpectedTrustRevision,
-		ExpectedBundleSHA256:  strings.ToLower(strings.TrimSpace(request.ExpectedBundleSHA256)),
+		Action:                 strings.ToLower(strings.TrimSpace(request.Action)),
+		Title:                  request.Title,
+		Goal:                   request.Goal,
+		Project:                strings.ToLower(strings.TrimSpace(request.Project)),
+		Device:                 strings.TrimSpace(request.Device),
+		CompletionConditions:   append([]string(nil), request.CompletionConditions...),
+		RequirementRefs:        append([]string(nil), request.RequirementRefs...),
+		Steps:                  steps,
+		TemplateID:             strings.TrimSpace(request.TemplateID),
+		SourceTemplateIDs:      append([]string(nil), request.SourceTemplateIDs...),
+		LearningChecks:         learningChecks,
+		Status:                 strings.ToLower(strings.TrimSpace(request.Status)),
+		Limit:                  intValue(request.Limit, 50),
+		TaskID:                 request.TaskID,
+		StepID:                 request.StepID,
+		TDDSeam:                request.TDDSeam,
+		ExecutionReceipts:      append([]ExecutionReceiptRequest(nil), request.ExecutionReceipts...),
+		CurrentStepID:          request.CurrentStepID,
+		NextStepID:             request.NextStepID,
+		Summary:                request.Summary,
+		ContextRefs:            append([]string(nil), request.ContextRefs...),
+		Diagnostic:             request.Diagnostic,
+		ExecutionEvidence:      executionEvidence,
+		EvidenceRecords:        append([]taskstate.EvidenceRecordInput(nil), request.EvidenceRecords...),
+		UnknownUpdates:         append([]taskstate.UnknownUpdate(nil), request.UnknownUpdates...),
+		Verified:               append([]string(nil), request.Verified...),
+		VerifiedEvidence:       append([]taskstate.ReviewEvidenceBinding(nil), request.VerifiedEvidence...),
+		AcknowledgedUnknownIDs: append([]string(nil), request.AcknowledgedUnknownIDs...),
+		Risks:                  append([]string(nil), request.Risks...),
+		IntentSpec:             request.IntentSpec,
+		EngineeringPolicy:      request.EngineeringPolicy,
+		ProvenanceQuery:        request.ProvenanceQuery,
+		ReviewRevision:         strings.TrimSpace(request.ReviewRevision),
+		AuditBundle:            request.AuditBundle,
+		AuditSignature:         request.AuditSignature,
+		AuditTrustRegistry:     request.AuditTrustRegistry,
+		AuditTrustCheckpoint:   request.AuditTrustCheckpoint,
+		ExpectedRootKeyID:      strings.TrimSpace(request.ExpectedRootKeyID),
+		ExpectedTrustRevision:  request.ExpectedTrustRevision,
+		ExpectedBundleSHA256:   strings.ToLower(strings.TrimSpace(request.ExpectedBundleSHA256)),
 	}
 	if request.CompletedStepIDs != nil {
 		input.CompletedStepIDsSet = true
@@ -149,6 +155,12 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 	}
 	if input.ExecutionEvidence != nil && input.Action != "checkpoint" {
 		return input, toolErrorDetails("VALIDATION_ERROR", "execution_evidence is only valid for checkpoint", "validation", map[string]any{"field": "execution_evidence", "action": input.Action})
+	}
+	if len(input.EvidenceRecords) > 0 && input.Action != "checkpoint" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "evidence_records are only valid for checkpoint", "validation", map[string]any{"field": "evidence_records", "action": input.Action})
+	}
+	if len(input.UnknownUpdates) > 0 && input.Action != "checkpoint" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "unknown_updates are only valid for checkpoint", "validation", map[string]any{"field": "unknown_updates", "action": input.Action})
 	}
 	if input.TDDSeam != nil && input.Action != "checkpoint" {
 		return input, toolErrorDetails("VALIDATION_ERROR", "tdd_seam is only valid for checkpoint", "validation", map[string]any{"field": "tdd_seam", "action": input.Action})
@@ -164,6 +176,9 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 	}
 	if len(input.VerifiedEvidence) > 0 && input.Action != "final_review" {
 		return input, toolErrorDetails("VALIDATION_ERROR", "verified_evidence is only valid for final_review", "validation", map[string]any{"field": "verified_evidence", "action": input.Action})
+	}
+	if len(input.AcknowledgedUnknownIDs) > 0 && input.Action != "final_review" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "acknowledged_unknown_ids are only valid for final_review", "validation", map[string]any{"field": "acknowledged_unknown_ids", "action": input.Action})
 	}
 	if input.ProvenanceQuery != nil && input.Action != "backtrace" {
 		return input, toolErrorDetails("VALIDATION_ERROR", "provenance_query is only valid for backtrace", "validation", map[string]any{"field": "provenance_query", "action": input.Action})
@@ -461,9 +476,15 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 			if input.ExecutionEvidence != nil {
 				return nil, toolErrorDetails("VALIDATION_ERROR", "execution_evidence is only accepted by single-step checkpoint", "validation", map[string]any{"field": "execution_evidence"})
 			}
+			if len(input.EvidenceRecords) > 0 {
+				return nil, toolErrorDetails("VALIDATION_ERROR", "evidence_records are only accepted by single-step checkpoint", "validation", map[string]any{"field": "evidence_records"})
+			}
+			if len(input.UnknownUpdates) > 0 {
+				return nil, toolErrorDetails("VALIDATION_ERROR", "unknown_updates are only accepted by single-step checkpoint", "validation", map[string]any{"field": "unknown_updates"})
+			}
 			task, err = s.tasks.BatchCheckpoint(input.TaskID, input.CompletedStepIDs, input.CurrentStepID, input.Summary)
 		} else {
-			task, err = s.checkpointWithReceiptEvidence(input.TaskID, input.StepID, input.Status, input.Summary, input.TDDSeam, input.ExecutionReceipts, input.Diagnostic, input.ExecutionEvidence)
+			task, err = s.checkpointWithReceiptEvidence(input.TaskID, input.StepID, input.Status, input.Summary, input.TDDSeam, input.ExecutionReceipts, input.Diagnostic, input.ExecutionEvidence, input.EvidenceRecords, input.UnknownUpdates)
 		}
 	case "block":
 		task, err = s.tasks.Block(input.TaskID, input.Summary)
@@ -475,7 +496,7 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 	case "handoff":
 		task, err = s.tasks.Handoff(input.TaskID, input.NextStepID, input.Summary, input.ContextRefs, input.Risks)
 	case "final_review":
-		review := taskstate.FinalReviewInput{Status: input.Status, Summary: input.Summary, VerifiedFacts: input.Verified, VerifiedEvidence: input.VerifiedEvidence, OpenRisks: input.Risks, IntentSpec: input.IntentSpec, EngineeringPolicy: input.EngineeringPolicy}
+		review := taskstate.FinalReviewInput{Status: input.Status, Summary: input.Summary, VerifiedFacts: input.Verified, VerifiedEvidence: input.VerifiedEvidence, AcknowledgedUnknownIDs: input.AcknowledgedUnknownIDs, OpenRisks: input.Risks, IntentSpec: input.IntentSpec, EngineeringPolicy: input.EngineeringPolicy}
 		task, err = s.tasks.FinalReview(input.TaskID, review)
 		if err == nil {
 			warnings := make([]string, 0, 2)

@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	sdkjsonrpc "github.com/modelcontextprotocol/go-sdk/jsonrpc"
@@ -23,16 +24,18 @@ type Server struct {
 	cfg         config.Config
 	sdk         *mcpsdk.Server
 	httpHandler http.Handler
+	mcpVersion  string
 }
 
 func NewServer(runtime *app.Runtime, cfg config.Config) *Server {
 	server := &Server{runtime: runtime, cfg: cfg}
+	server.mcpVersion = contractAwareMCPVersion(buildinfo.Version, server.ToolContractHash())
 	serverOptions := &mcpsdk.ServerOptions{
 		Capabilities: &mcpsdk.ServerCapabilities{},
 		Instructions: serverInstructions(cfg.NexusEndpoint != "", cfg.Instructions),
 	}
 	server.sdk = mcpsdk.NewServer(
-		&mcpsdk.Implementation{Name: config.ServerName, Version: buildinfo.Version},
+		&mcpsdk.Implementation{Name: config.ServerName, Version: server.mcpVersion},
 		serverOptions,
 	)
 	if runtime != nil {
@@ -83,6 +86,32 @@ func (s *Server) ToolContractHash() string {
 		return ""
 	}
 	return fmt.Sprintf("sha256:%x", sha256.Sum256(encoded))
+}
+
+func (s *Server) MCPVersion() string {
+	if s == nil {
+		return strings.TrimSpace(buildinfo.Version)
+	}
+	if version := strings.TrimSpace(s.mcpVersion); version != "" {
+		return version
+	}
+	return contractAwareMCPVersion(buildinfo.Version, s.ToolContractHash())
+}
+
+func contractAwareMCPVersion(baseVersion, contractHash string) string {
+	baseVersion = strings.TrimSpace(baseVersion)
+	if baseVersion == "" {
+		baseVersion = "unknown"
+	}
+	digest := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(contractHash), "sha256:"))
+	if len(digest) < 12 {
+		return baseVersion
+	}
+	digest = digest[:12]
+	if strings.Contains(baseVersion, "+") {
+		return baseVersion + ".tools." + digest
+	}
+	return baseVersion + "+tools." + digest
 }
 
 func (s *Server) ToolDescriptors() []map[string]any {

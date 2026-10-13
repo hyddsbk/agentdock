@@ -11,8 +11,39 @@ import (
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/uvwt/agentdock/internal/app"
+	"github.com/uvwt/agentdock/internal/buildinfo"
 	"github.com/uvwt/agentdock/internal/config"
 )
+
+func TestMCPVersionCarriesToolContractFingerprint(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{AgentDockDefaultDir: root, AgentDockHome: filepath.Join(root, ".agentdock")}
+	if err := cfg.Normalize(); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := app.NewRuntime(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+
+	server := NewServer(runtime, cfg)
+	hash := strings.TrimPrefix(server.ToolContractHash(), "sha256:")
+	if len(hash) < 12 {
+		t.Fatalf("tool contract hash = %q", hash)
+	}
+	want := buildinfo.Version + "+tools." + hash[:12]
+	if got := server.MCPVersion(); got != want {
+		t.Fatalf("MCPVersion() = %q, want %q", got, want)
+	}
+}
+
+func TestContractAwareMCPVersionPreservesExistingBuildMetadata(t *testing.T) {
+	got := contractAwareMCPVersion("0.8.3+candidate", "sha256:0123456789abcdef")
+	if got != "0.8.3+candidate.tools.0123456789ab" {
+		t.Fatalf("contractAwareMCPVersion() = %q", got)
+	}
+}
 
 func TestToolDescriptorsExposeSafetyAnnotations(t *testing.T) {
 	descriptors := toolDescriptorsForConfig(t, []string{"read_file", "skill_package", "task_manage", "file_publish"}, config.Config{})

@@ -13,7 +13,7 @@ func TestTaskManageSchemaExposesTwoAxisAndTDDContracts(t *testing.T) {
 		if !ok {
 			t.Fatalf("properties missing: %#v", schema)
 		}
-		for _, field := range []string{"intent_spec", "engineering_policy", "tdd_seam", "execution_receipts"} {
+		for _, field := range []string{"intent_spec", "engineering_policy", "verified_evidence", "tdd_seam", "execution_receipts"} {
 			if _, ok := props[field]; !ok {
 				t.Fatalf("task_manage schema missing %s with Nexus=%t", field, cfg.NexusEndpoint != "")
 			}

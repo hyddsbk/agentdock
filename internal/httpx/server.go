@@ -42,10 +42,10 @@ func Serve(ctx context.Context, server *mcp.Server, runtime runtimeapi.Runtime, 
 		writeJSON(w, map[string]any{"ok": true, "version": buildinfo.Version})
 	})
 	mux.HandleFunc("/.well-known/mcp.json", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, serverCard(cfg, r))
+		writeJSON(w, serverCard(server, cfg, r))
 	})
 	mux.HandleFunc("/.well-known/mcp/server-card.json", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, serverCard(cfg, r))
+		writeJSON(w, serverCard(server, cfg, r))
 	})
 	mux.HandleFunc("/artifacts/public/", func(w http.ResponseWriter, r *http.Request) {
 		publicArtifactStore.ServeHTTP(w, r, "/artifacts/public/")

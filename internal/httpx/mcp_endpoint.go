@@ -110,7 +110,7 @@ func requestPublicBaseURL(cfg config.Config, r *http.Request) string {
 	}
 	return scheme + "://" + host
 }
-func serverCard(cfg config.Config, r *http.Request) map[string]any {
+func serverCard(server *mcp.Server, cfg config.Config, r *http.Request) map[string]any {
 	issuer := issuerFor(cfg, r)
 	authInfo := map[string]any{"type": "none"}
 	if cfg.AuthToken != "" {
@@ -119,5 +119,17 @@ func serverCard(cfg config.Config, r *http.Request) map[string]any {
 	if cfg.OAuthEnabled {
 		authInfo = map[string]any{"type": "oauth2", "scheme": "Bearer", "header": "Authorization", "authorizationUrl": issuer + "/oauth/authorize", "tokenUrl": issuer + "/oauth/token"}
 	}
-	return map[string]any{"name": config.ServerName, "title": "AgentDock", "version": buildinfo.Version, "description": "Local coding tools MCP server", "transport": map[string]any{"type": "streamable-http", "url": issuer + "/mcp"}, "auth": authInfo}
+	version := buildinfo.Version
+	contractHash := ""
+	if server != nil {
+		version = server.MCPVersion()
+		contractHash = server.ToolContractHash()
+	}
+	return map[string]any{
+		"name": config.ServerName, "title": "AgentDock", "version": version,
+		"description":      "Local coding tools MCP server",
+		"transport":        map[string]any{"type": "streamable-http", "url": issuer + "/mcp"},
+		"auth":             authInfo,
+		"toolContractHash": contractHash,
+	}
 }

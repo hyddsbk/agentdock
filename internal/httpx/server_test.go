@@ -359,7 +359,7 @@ func TestServerURLAloneDoesNotRequireAuthOrDeclareOAuth(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusAccepted, recorder.Body.String())
 	}
 
-	card := serverCard(cfg, httptest.NewRequest(http.MethodGet, "/.well-known/mcp.json", nil))
+	card := serverCard(nil, cfg, httptest.NewRequest(http.MethodGet, "/.well-known/mcp.json", nil))
 	authInfo := card["auth"].(map[string]any)
 	if authInfo["type"] != "none" {
 		t.Fatalf("auth type = %v, want none", authInfo["type"])
@@ -370,7 +370,7 @@ func TestServerCardDeclaresOAuthOnlyWhenOAuthEnabled(t *testing.T) {
 	cfg := testConfig(t)
 	cfg.OAuthEnabled = true
 	cfg.OAuthServerURL = "https://agentdock.example.com"
-	card := serverCard(cfg, httptest.NewRequest(http.MethodGet, "/.well-known/mcp.json", nil))
+	card := serverCard(nil, cfg, httptest.NewRequest(http.MethodGet, "/.well-known/mcp.json", nil))
 	authInfo := card["auth"].(map[string]any)
 	if authInfo["type"] != "oauth2" {
 		t.Fatalf("auth type = %v, want oauth2", authInfo["type"])

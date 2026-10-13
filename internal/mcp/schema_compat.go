@@ -1,5 +1,7 @@
 package mcp
 
+import "encoding/json"
+
 // openAICompatibleSchemaProjection returns a transport-only projection of a
 // tool JSON Schema that avoids composition keywords rejected by OpenAI's
 // strict tool/Structured Outputs schema subset.
@@ -12,7 +14,17 @@ func openAICompatibleSchemaProjection(schema map[string]any) map[string]any {
 	if schema == nil {
 		return nil
 	}
-	projected, _ := projectOpenAICompatibleSchemaValue(schema).(map[string]any)
+	encoded, err := json.Marshal(schema)
+	if err != nil {
+		projected, _ := projectOpenAICompatibleSchemaValue(schema).(map[string]any)
+		return projected
+	}
+	var normalized map[string]any
+	if err := json.Unmarshal(encoded, &normalized); err != nil {
+		projected, _ := projectOpenAICompatibleSchemaValue(schema).(map[string]any)
+		return projected
+	}
+	projected, _ := projectOpenAICompatibleSchemaValue(normalized).(map[string]any)
 	return projected
 }
 

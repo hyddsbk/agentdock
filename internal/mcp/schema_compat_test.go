@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/uvwt/agentdock/internal/app"
@@ -49,6 +50,20 @@ func TestToolDescriptorsProjectOpenAICompatibleJSONSchema(t *testing.T) {
 	}
 }
 
+func TestOpenAICompatibleSchemaProjectionHandlesTypedSchemaSlices(t *testing.T) {
+	schema := map[string]any{
+		"type": "array",
+		"items": map[string]any{
+			"oneOf": []map[string]any{
+				{"type": "object", "properties": map[string]any{"action": map[string]any{"type": "string", "const": "click"}}},
+				{"type": "object", "properties": map[string]any{"action": map[string]any{"type": "string", "const": "fill"}}},
+			},
+		},
+	}
+	projected := openAICompatibleSchemaProjection(schema)
+	assertNoUnsupportedOpenAIComposition(t, "typedSlice", projected)
+}
+
 func TestTaskManagePublishedSchemaAvoidsUnsupportedOpenAIComposition(t *testing.T) {
 	descriptor := toolDescriptorsForConfig(t, []string{"task_manage"}, config.Config{NexusEndpoint: "http://127.0.0.1:18777"})[0]
 	assertNoUnsupportedOpenAIComposition(t, "task_manage.inputSchema", descriptor["inputSchema"])
@@ -65,6 +80,15 @@ func TestAllPublishedToolDescriptorsAvoidUnsupportedOpenAIComposition(t *testing
 
 func assertNoUnsupportedOpenAIComposition(t *testing.T, path string, value any) {
 	t.Helper()
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal %s: %v", path, err)
+	}
+	var normalized any
+	if err := json.Unmarshal(encoded, &normalized); err != nil {
+		t.Fatalf("normalize %s: %v", path, err)
+	}
+	value = normalized
 	blocked := map[string]bool{
 		"allOf": true, "not": true, "dependentRequired": true, "dependentSchemas": true,
 		"if": true, "then": true, "else": true, "const": true,

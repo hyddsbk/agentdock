@@ -82,7 +82,7 @@ func TestRuntimeExposesSingleToolSet(t *testing.T) {
 	for _, name := range rt.ToolNames() {
 		seen[name] = true
 	}
-	for _, name := range []string{"agentdock_context", "session_observe", "session_act", "recall_read", "recall_write", "skill_package", "mcp_manage", "mcp_tool_search", "mcp_tool_inspect", "mcp_tool_call"} {
+	for _, name := range []string{"agentdock_context", "session_observe", "session_act", "recall_read", "recall_write", "skill_package", "skill_discovery", "skill_ephemeral", "mcp_manage", "mcp_tool_search", "mcp_tool_inspect", "mcp_tool_call"} {
 		if !seen[name] {
 			t.Fatalf("single tool set missing %s: %#v", name, seen)
 		}
@@ -203,6 +203,46 @@ func TestSkillPackageSchemaAndRemovedRuntimeTools(t *testing.T) {
 	for _, name := range []string{"valid", "source", "digest", "document", "issues"} {
 		if _, ok := packageOutputProps[name]; !ok {
 			t.Fatalf("skill_package output schema missing %q", name)
+		}
+	}
+}
+
+func TestSkillDiscoverySchemaIsReadOnlyGovernanceBridge(t *testing.T) {
+	props := schemaProperties(t, "skill_discovery")
+	assertSameStrings(t, enumStrings(t, props["action"]), []string{"search", "pin"})
+	for _, name := range []string{"query", "owner", "limit", "source", "skill"} {
+		if _, ok := props[name]; !ok {
+			t.Fatalf("skill_discovery input schema missing %q", name)
+		}
+	}
+	if _, ok := props["activate"]; ok {
+		t.Fatal("skill_discovery must not expose package activation")
+	}
+	outputProps := outputSchema("skill_discovery")["properties"].(map[string]any)
+	for _, name := range []string{"candidates", "lock", "lock_sha256", "review_required", "install_authorized", "next_owner"} {
+		if _, ok := outputProps[name]; !ok {
+			t.Fatalf("skill_discovery output schema missing %q", name)
+		}
+	}
+}
+
+func TestSkillEphemeralSchemaCannotMutatePackageAuthority(t *testing.T) {
+	props := schemaProperties(t, "skill_ephemeral")
+	assertSameStrings(t, enumStrings(t, props["action"]), []string{"bind", "list", "clear"})
+	for _, name := range []string{"skill", "binding_id", "source_lock", "source_lock_sha256", "adoption_plan", "adoption_plan_sha256"} {
+		if _, ok := props[name]; !ok {
+			t.Fatalf("skill_ephemeral input schema missing %q", name)
+		}
+	}
+	for _, forbidden := range []string{"source", "activate", "version", "digest", "artifact_sha256"} {
+		if _, ok := props[forbidden]; ok {
+			t.Fatalf("skill_ephemeral must not expose package mutation field %q", forbidden)
+		}
+	}
+	outputProps := outputSchema("skill_ephemeral")["properties"].(map[string]any)
+	for _, name := range []string{"binding", "bindings", "count", "binding_id", "removed", "persistent", "install_authorized"} {
+		if _, ok := outputProps[name]; !ok {
+			t.Fatalf("skill_ephemeral output schema missing %q", name)
 		}
 	}
 }

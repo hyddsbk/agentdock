@@ -46,7 +46,7 @@ func TestContractAwareMCPVersionPreservesExistingBuildMetadata(t *testing.T) {
 }
 
 func TestToolDescriptorsExposeSafetyAnnotations(t *testing.T) {
-	descriptors := toolDescriptorsForConfig(t, []string{"read_file", "skill_package", "task_manage", "file_publish"}, config.Config{})
+	descriptors := toolDescriptorsForConfig(t, []string{"read_file", "skill_package", "skill_discovery", "skill_ephemeral", "task_manage", "file_publish"}, config.Config{})
 	byName := map[string]map[string]any{}
 	for _, descriptor := range descriptors {
 		name, _ := descriptor["name"].(string)
@@ -55,6 +55,8 @@ func TestToolDescriptorsExposeSafetyAnnotations(t *testing.T) {
 
 	assertToolAnnotation(t, byName["read_file"], true, false, false)
 	assertToolAnnotation(t, byName["skill_package"], false, true, true)
+	assertToolAnnotation(t, byName["skill_discovery"], true, false, true)
+	assertToolAnnotation(t, byName["skill_ephemeral"], false, false, true)
 	assertToolAnnotation(t, byName["task_manage"], false, false, false)
 	assertToolAnnotation(t, byName["file_publish"], false, false, true)
 

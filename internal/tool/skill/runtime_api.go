@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	skills "github.com/uvwt/agentdock/internal/skill"
@@ -89,6 +90,13 @@ func (s *Service) CapabilityItems() ([]CapabilityItem, error) {
 			SkillRef: managedSkillRef(name), SourceType: "managed",
 		})
 	}
+	items = append(items, s.ephemeral.capabilityItems()...)
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Name != items[j].Name {
+			return items[i].Name < items[j].Name
+		}
+		return items[i].SourceType < items[j].SourceType
+	})
 	return items, nil
 }
 

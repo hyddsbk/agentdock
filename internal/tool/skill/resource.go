@@ -26,6 +26,9 @@ func (s *Service) ResolveResource(raw string) (string, string, error) {
 	if cleaned == "." || cleaned == "" || strings.HasPrefix(cleaned, "/") || strings.HasPrefix(cleaned, "../") || cleaned == ".." || strings.Contains(cleaned, `\`) {
 		return "", "", toolErrorDetails("INVALID_SKILL_URI", "skill resource path must stay inside the active Skill package", "validation", map[string]any{"path": raw})
 	}
+	if strings.HasPrefix(parsed.Host, "ephemeral--") {
+		return s.ephemeral.resolve(parsed.Host, cleaned)
+	}
 
 	packageDir, err := s.state.Resolve(parsed.Host, "")
 	if err != nil {

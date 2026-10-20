@@ -172,6 +172,11 @@ func (r *Runtime) Close() error {
 				closeErrors = append(closeErrors, err)
 			}
 		}
+		if r.skills != nil {
+			if err := r.skills.Close(); err != nil {
+				closeErrors = append(closeErrors, fmt.Errorf("close Skill runtime: %w", err))
+			}
+		}
 		if r.dynamicMCP != nil {
 			if err := r.dynamicMCP.Close(); err != nil {
 				closeErrors = append(closeErrors, fmt.Errorf("close dynamic MCP clients: %w", err))

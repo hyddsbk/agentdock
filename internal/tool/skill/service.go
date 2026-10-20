@@ -13,10 +13,12 @@ import (
 const runtimeAPISource = "agentdock-api"
 
 type Service struct {
-	manager *skills.Manager
-	state   *skillstate.Store
-	ws      *workspace.Workspace
-	envs    *envstore.Store
+	manager   *skills.Manager
+	state     *skillstate.Store
+	ws        *workspace.Workspace
+	envs      *envstore.Store
+	discovery discoveryProvider
+	ephemeral *ephemeralManager
 }
 
 func New(cfg config.Config, ws *workspace.Workspace, envs *envstore.Store) (*Service, error) {
@@ -32,7 +34,21 @@ func New(cfg config.Config, ws *workspace.Workspace, envs *envstore.Store) (*Ser
 	if err != nil {
 		return nil, err
 	}
-	return &Service{manager: manager, state: state, ws: ws, envs: envs}, nil
+	return &Service{
+		manager:   manager,
+		state:     state,
+		ws:        ws,
+		envs:      envs,
+		discovery: newDiscoveryProvider(),
+		ephemeral: newEphemeralManager(),
+	}, nil
+}
+
+func (s *Service) Close() error {
+	if s == nil || s.ephemeral == nil {
+		return nil
+	}
+	return s.ephemeral.close()
 }
 
 func (s *Service) ResolveActive(skill string) (string, error) {

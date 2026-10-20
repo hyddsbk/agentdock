@@ -76,6 +76,7 @@ func TestRuntimeOutputContractDefaultToolSuccessPaths(t *testing.T) {
 		{name: "session_observe", args: map[string]any{"action": "list"}},
 		{name: "session_act", args: map[string]any{"action": "kill_all"}},
 		{name: "task_manage", args: map[string]any{"action": "list"}},
+		{name: "skill_ephemeral", args: map[string]any{"action": "list"}},
 		{name: "mcp_manage", args: map[string]any{"action": "list"}},
 		{name: "mcp_tool_search", args: map[string]any{"query": "*"}},
 		{name: "file_publish", args: map[string]any{"path": "contract.txt", "retention_seconds": 60}},

@@ -83,6 +83,8 @@ func TestTypedToolRequestFieldsMatchPublishedSchemas(t *testing.T) {
 		{name: toolacp.ToolPrompt, request: toolacp.PromptRequest{}, exact: true},
 		{name: toolacp.ToolInteraction, request: toolacp.InteractionRequest{}, exact: true},
 		{name: toolskill.ToolPackage, request: toolskill.PackageRequest{}, exact: true},
+		{name: toolskill.ToolDiscovery, request: toolskill.DiscoveryRequest{}, exact: true},
+		{name: toolskill.ToolEphemeral, request: toolskill.EphemeralRequest{}, exact: true},
 		{name: toolmcp.ToolManage, request: toolmcp.ManageRequest{}, exact: true},
 		{name: toolmcp.ToolSearch, request: toolmcp.SearchRequest{}, exact: true},
 		{name: toolmcp.ToolInspect, request: toolmcp.InspectRequest{}, exact: true},

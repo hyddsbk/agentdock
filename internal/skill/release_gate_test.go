@@ -3,6 +3,7 @@ package skill
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,6 +44,15 @@ func TestSEOReleaseGateRuleFamilies(t *testing.T) {
 			extraFile:   "references/legacy.md",
 			extraBody:   "Run claude-seo audit for the final check.\n",
 			wantRule:    "legacy_runtime",
+		},
+		{
+			name:        "legacy keyword density",
+			skillName:   "seo-density-test",
+			description: "SEO content analysis helper.",
+			body:        "# Density\n\nUse current AgentDock capabilities.",
+			extraFile:   "references/legacy-density.md",
+			extraBody:   "Keyword density: natural (1-3%).\n",
+			wantRule:    "legacy_keyword_density",
 		},
 		{
 			name:        "fixed path",
@@ -89,6 +99,73 @@ func TestSEOReleaseGateRuleFamilies(t *testing.T) {
 	}
 }
 
+func TestSEOReleaseGateRejectsLegacyKeywordDensityDirectives(t *testing.T) {
+	directives := []string{
+		"# Keyword Density and Placement Rules",
+		"## Primary Keyword Density",
+		"## Required Placement Locations",
+		"The primary keyword MUST appear in all of these:",
+		"**Primary keyword placement:** H1, first 100 words, one H2, URL slug, meta title",
+		"Keyword density: natural (1-3%)",
+		"At least one image alt text",
+		"| Closely related terms | 5-8 | Distribute through the body |",
+		"| Semantic keywords | 10-15 | Cover related concepts |",
+		"One H1 mention plus 1-2 H2 mentions is sufficient.",
+		"Ignoring first 100 words is a mistake.",
+		"Only count exact-match appearances toward density.",
+	}
+	for index, directive := range directives {
+		t.Run(fmt.Sprintf("directive-%02d", index+1), func(t *testing.T) {
+			source := writeSEOReleaseGateFixture(
+				t,
+				"seo-density-fixture",
+				"SEO content analysis helper.",
+				"# Helper\n\nUse current AgentDock capabilities.",
+				"references/legacy-density.md",
+				directive+"\n",
+			)
+			doc, err := LoadSkillDocument(source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			violations, err := validateReleaseGate(source, doc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !hasReleaseGateRule(violations, "legacy_keyword_density") {
+				t.Fatalf("directive %q was not rejected: %#v", directive, violations)
+			}
+		})
+	}
+}
+
+func TestSEOReleaseGateAllowsModernKeywordHeuristics(t *testing.T) {
+	body := "# Keyword Policy\n\n" +
+		"Do not optimize to a fixed keyword density.\n\n" +
+		"Keyword density may be inspected only as a stuffing heuristic; never target a percentage.\n\n" +
+		"There is no fixed first 100 words quota.\n\n" +
+		"Do not use fixed quotas such as 5-8 related terms or 10-15 semantic keywords.\n\n" +
+		"Image alt text must describe the actual image rather than serve as a keyword slot.\n"
+	source := writeSEOReleaseGateFixture(
+		t,
+		"seo-density-modern",
+		"SEO content analysis helper.",
+		body,
+		"",
+		"",
+	)
+	doc, err := LoadSkillDocument(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	violations, err := validateReleaseGate(source, doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasReleaseGateRule(violations, "legacy_keyword_density") {
+		t.Fatalf("modern keyword heuristics were rejected: %#v", violations)
+	}
+}
 func TestSEOReleaseGateAcceptsLayeredContracts(t *testing.T) {
 	body := "# Provider\n\n" +
 		"This Skill is an evidence-only measurement provider.\n\n" +
@@ -158,7 +235,7 @@ func TestValidateReportsSEOReleaseGateIssues(t *testing.T) {
 		t,
 		"seo-invalid-validate",
 		"SEO evidence provider for measurements.",
-		"# Provider\n\nThis Skill owns SEO strategy.\n",
+		"# Provider\n\nThis Skill owns SEO strategy.\n\nKeyword density: natural (1-3%).\n",
 		"references/setup.md",
 		"npm install hidden-runtime\n",
 	)
@@ -170,7 +247,8 @@ func TestValidateReportsSEOReleaseGateIssues(t *testing.T) {
 		t.Fatalf("invalid SEO package unexpectedly valid: %#v", result)
 	}
 	if !hasValidateStage(result.Issues, "release_gate.seo.provider_authority") ||
-		!hasValidateStage(result.Issues, "release_gate.seo.self_install_dependency") {
+		!hasValidateStage(result.Issues, "release_gate.seo.self_install_dependency") ||
+		!hasValidateStage(result.Issues, "release_gate.seo.legacy_keyword_density") {
 		t.Fatalf("missing release-gate issues: %#v", result.Issues)
 	}
 }

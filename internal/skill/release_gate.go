@@ -59,6 +59,19 @@ var (
 		regexp.MustCompile("(?i)\\bnpx\\s+(?:--yes\\s+|-y\\s+)?[@A-Za-z0-9_.-]+"),
 		regexp.MustCompile("(?i)\\b(?:curl|wget)\\b[^\\n|]{0,240}\\|\\s*(?:sh|bash)\\b"),
 	}
+	legacyKeywordDensityPatterns = []*regexp.Regexp{
+		regexp.MustCompile("(?i)^\\s*#+\\s*keyword\\s+density\\s+and\\s+placement\\s+rules\\s*$"),
+		regexp.MustCompile("(?i)^\\s*#+\\s*primary\\s+keyword\\s+density\\s*$"),
+		regexp.MustCompile("(?i)^\\s*#+\\s*required\\s+placement\\s+locations\\s*$"),
+		regexp.MustCompile("(?i)\\bprimary\\s+keyword\\s+must\\s+appear\\s+in\\s+all\\s+of\\s+these\\b"),
+		regexp.MustCompile("(?i)\\bprimary\\s+keyword\\s+placement\\s*:"),
+		regexp.MustCompile("(?i)\\bkeyword\\s+density\\s*:\\s*(?:natural|ideal|optimal|recommended|required|target)?[^%\\n]{0,40}\\d+(?:\\.\\d+)?\\s*(?:-|\\x{2013}|\\x{2014})?\\s*\\d*(?:\\.\\d+)?\\s*%"),
+		regexp.MustCompile("(?i)\\b(?:target|maintain|keep|aim\\s+for|recommended|ideal|optimal)\\b[^\\n]{0,40}\\bkeyword\\s+density\\b[^%\\n]{0,40}\\d+(?:\\.\\d+)?\\s*%"),
+		regexp.MustCompile("(?i)\\bat\\s+least\\s+one\\s+image\\s+alt\\s+text\\b|\\bfree\\s+placement\\s+opportunity\\b"),
+		regexp.MustCompile("(?i)\\b(?:closely\\s+)?related\\s+terms\\b[^|\\n]{0,24}\\|\\s*\\d+\\s*-\\s*\\d+\\s*\\||\\bsemantic\\s+keywords?\\b[^|\\n]{0,24}\\|\\s*\\d+\\s*-\\s*\\d+\\s*\\|"),
+		regexp.MustCompile("(?i)\\bone\\s+h1\\s+mention\\s+plus\\s+\\d+\\s*-\\s*\\d+\\s+h2\\s+mentions?\\b"),
+		regexp.MustCompile("(?i)\\bignoring\\s+first\\s+100\\s+words\\b|\\bcount\\s+exact-match\\s+appearances?\\s+toward\\s+density\\b"),
+	}
 	authorityClaimPattern              = regexp.MustCompile("(?i)\\b(?:own|owns|decide|decides|assign|assigns|lock|locks|approve|approves|authoritative|authority)\\b")
 	clauseSplitPattern                 = regexp.MustCompile("(?i)[.;\\n]+|\\bbut\\b|\\bhowever\\b")
 	evidenceProviderDescriptionPattern = regexp.MustCompile("(?i)\\b(?:evidence|measurement)\\s+provider\\b")
@@ -164,6 +177,7 @@ func loadReleaseGateTextFiles(packageDir string) ([]releaseGateTextFile, error) 
 func validateSEOContract(doc SkillDocument, files []releaseGateTextFile) []ReleaseGateViolation {
 	violations := make([]ReleaseGateViolation, 0)
 	violations = append(violations, validateSEOLegacyRuntime(files)...)
+	violations = append(violations, validateSEOLegacyKeywordDensity(files)...)
 	violations = append(violations, validateSEOFixedPaths(files)...)
 	violations = append(violations, validateSEOSelfInstall(files)...)
 	violations = append(violations, validateSEOProviderAuthority(doc)...)
@@ -178,6 +192,16 @@ func validateSEOLegacyRuntime(files []releaseGateTextFile) []ReleaseGateViolatio
 	}, "legacy Claude/claude-seo runtime or command reference is not allowed")
 }
 
+func validateSEOLegacyKeywordDensity(files []releaseGateTextFile) []ReleaseGateViolation {
+	return scanReleaseGateLines(files, "legacy_keyword_density", func(line string) bool {
+		for _, pattern := range legacyKeywordDensityPatterns {
+			if pattern.MatchString(line) {
+				return true
+			}
+		}
+		return false
+	}, "legacy keyword-density quota or mechanical keyword-placement rule is not allowed; use owner-topic, semantic-coverage, cannibalization, and stuffing heuristics")
+}
 func validateSEOFixedPaths(files []releaseGateTextFile) []ReleaseGateViolation {
 	return scanReleaseGateLines(files, "fixed_path", func(line string) bool {
 		return windowsFixedPathPattern.MatchString(line) ||

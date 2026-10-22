@@ -103,6 +103,7 @@ func retryScheduledTaskStart(
 	healthURL string,
 ) error {
 	deadline := time.Now().Add(timeout)
+	var lastTransientRunErr error
 	for time.Now().Before(deadline) {
 		if healthy() {
 			return nil
@@ -113,7 +114,10 @@ func retryScheduledTaskStart(
 		// in that window succeeds at the CLI level but is silently ignored.
 		// Retry /Run until either the task is actually startable or health returns.
 		if err := runTask(); err != nil {
-			return err
+			if !isTransientScheduledTaskStartError(err) {
+				return err
+			}
+			lastTransientRunErr = err
 		}
 		probeUntil := time.Now().Add(retryDelay)
 		if probeUntil.After(deadline) {
@@ -130,7 +134,27 @@ func retryScheduledTaskStart(
 			}
 		}
 	}
+	if lastTransientRunErr != nil {
+		return fmt.Errorf("AgentDock 计划任务在过渡窗口内持续拒绝启动: %w", lastTransientRunErr)
+	}
 	return fmt.Errorf("AgentDock 健康检查失败: %s", healthURL)
+}
+
+func isTransientScheduledTaskStartError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	for _, marker := range []string{
+		"0x800710e0",
+		"operator or administrator has refused the request",
+		"操作员或系统管理员拒绝了请求",
+	} {
+		if strings.Contains(message, strings.ToLower(marker)) {
+			return true
+		}
+	}
+	return false
 }
 
 func stopCore(ctx context.Context, manifest Manifest, runtimeRoot string) error {

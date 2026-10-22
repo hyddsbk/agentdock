@@ -16,6 +16,20 @@ func (s *Store) CreateWithContext(title, goal, project, device string, condition
 }
 
 func (s *Store) CreateWithTraceability(title, goal, project, device string, conditionTexts []string, steps []TaskStepInput, sourceTemplates []TemplateReference, requirementRefs []string, initialBindings ...EvolutionBinding) (Task, error) {
+	return s.createWithTraceability("", "", "", title, goal, project, device, conditionTexts, steps, sourceTemplates, requirementRefs, initialBindings...)
+}
+
+func (s *Store) CreateWithAdmission(admission Admission, match WorkflowMatchReceipt, title, goal, project, device string, conditionTexts []string, steps []TaskStepInput, sourceTemplates []TemplateReference, requirementRefs []string, initialBindings ...EvolutionBinding) (Task, error) {
+	if admission.Status != AdmissionPass {
+		return Task{}, fmt.Errorf("admission %s must pass before task creation", admission.ID)
+	}
+	if match.AdmissionRef != admission.ID || match.AdmissionDigest != admission.Digest || strings.TrimSpace(match.Digest) == "" {
+		return Task{}, errors.New("workflow match receipt does not bind to admission")
+	}
+	return s.createWithTraceability(admission.ID, admission.Digest, match.Digest, title, goal, project, device, conditionTexts, steps, sourceTemplates, requirementRefs, initialBindings...)
+}
+
+func (s *Store) createWithTraceability(admissionRef, admissionDigest, workflowMatchDigest, title, goal, project, device string, conditionTexts []string, steps []TaskStepInput, sourceTemplates []TemplateReference, requirementRefs []string, initialBindings ...EvolutionBinding) (Task, error) {
 	release, err := s.acquireStoreLock()
 	if err != nil {
 		return Task{}, err
@@ -101,22 +115,25 @@ func (s *Store) CreateWithTraceability(title, goal, project, device string, cond
 		}
 	}
 	task := Task{
-		SchemaVersion:     SchemaVersion,
-		ID:                id,
-		Title:             title,
-		Goal:              goal,
-		Project:           project,
-		Device:            device,
-		Status:            StatusActive,
-		Phase:             phase,
-		Conditions:        make([]Condition, 0, len(conditionTexts)),
-		RequirementRefs:   requirementRefs,
-		SourceTemplates:   templateRefs,
-		Steps:             taskSteps,
-		EvolutionBindings: bindings,
-		Events:            []Event{{Type: "created", Summary: "task created", CreatedAt: now}},
-		CreatedAt:         now,
-		UpdatedAt:         now,
+		SchemaVersion:       SchemaVersion,
+		ID:                  id,
+		Title:               title,
+		Goal:                goal,
+		AdmissionRef:        admissionRef,
+		AdmissionDigest:     admissionDigest,
+		WorkflowMatchDigest: workflowMatchDigest,
+		Project:             project,
+		Device:              device,
+		Status:              StatusActive,
+		Phase:               phase,
+		Conditions:          make([]Condition, 0, len(conditionTexts)),
+		RequirementRefs:     requirementRefs,
+		SourceTemplates:     templateRefs,
+		Steps:               taskSteps,
+		EvolutionBindings:   bindings,
+		Events:              []Event{{Type: "created", Summary: "task created", CreatedAt: now}},
+		CreatedAt:           now,
+		UpdatedAt:           now,
 	}
 	if len(templateRefs) > 0 {
 		ids := make([]string, 0, len(templateRefs))

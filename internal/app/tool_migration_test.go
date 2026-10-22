@@ -85,7 +85,19 @@ func TestLegacyModelEntrypointsRemovedFromRuntime(t *testing.T) {
 
 func TestWorkflowTemplateMatchIsOnlyTemplateDiscoveryEntrypoint(t *testing.T) {
 	rt, _ := newCodeToolsRuntime(t)
-	result, err := rt.Call(context.Background(), "workflow_template_manage", map[string]any{"action": "match", "goal": "deploy AgentDock", "device": "DockMini"})
+	admitted, err := rt.Call(context.Background(), "task_manage", map[string]any{
+		"action": "admit",
+		"admission": map[string]any{
+			"goal": "deploy AgentDock", "deliverable": "deployment workflow selection", "audience": "operators",
+			"success_conditions": []string{"workflow is selected"}, "failure_conditions": []string{"workflow selection bypasses admission"},
+			"evidence_requirement": "lightweight", "mutation_authority": "staging_write", "complexity": "substantial",
+			"workflow_type": "deployment", "device": "DockMini",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := rt.Call(context.Background(), "workflow_template_manage", map[string]any{"action": "match", "admission_ref": admitted["admission_ref"]})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,12 +11,14 @@ import (
 	"github.com/uvwt/agentdock/internal/taskstate"
 )
 
-var taskActions = []string{"create", "list", "get", "backtrace", "revalidate", "export_audit_bundle", "verify_audit_bundle", "export_signed_audit_bundle", "verify_signed_audit_bundle", "verify_signed_audit_bundle_online", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}
+var taskActions = []string{"admit", "get_admission", "create", "list", "get", "backtrace", "revalidate", "export_audit_bundle", "verify_audit_bundle", "export_signed_audit_bundle", "verify_signed_audit_bundle", "verify_signed_audit_bundle_online", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}
 
 var workflowTemplateActions = []string{"publish", "retire", "list", "get", "get_many", "match", "vector_index"}
 
 type taskManageInput struct {
 	Action                 string
+	Admission              *taskstate.AdmissionInput
+	AdmissionRef           string
 	Title                  string
 	Goal                   string
 	Project                string
@@ -62,6 +64,7 @@ type taskManageInput struct {
 
 type workflowTemplateInput struct {
 	Action               string
+	AdmissionRef         string
 	TemplateID           string
 	TemplateIDs          []string
 	TemplateVersion      string
@@ -106,6 +109,8 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 
 	input := taskManageInput{
 		Action:                 strings.ToLower(strings.TrimSpace(request.Action)),
+		Admission:              request.Admission,
+		AdmissionRef:           strings.TrimSpace(request.AdmissionRef),
 		Title:                  request.Title,
 		Goal:                   request.Goal,
 		Project:                strings.ToLower(strings.TrimSpace(request.Project)),
@@ -149,6 +154,18 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 	if request.CompletedStepIDs != nil {
 		input.CompletedStepIDsSet = true
 		input.CompletedStepIDs = append([]string(nil), (*request.CompletedStepIDs)...)
+	}
+	if input.Admission != nil && input.Action != "admit" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "admission is only valid for admit", "validation", map[string]any{"field": "admission", "action": input.Action})
+	}
+	if input.AdmissionRef != "" && input.Action != "create" && input.Action != "get_admission" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "admission_ref is only valid for create or get_admission", "validation", map[string]any{"field": "admission_ref", "action": input.Action})
+	}
+	if input.Action == "admit" && input.Admission == nil {
+		return input, toolErrorDetails("VALIDATION_ERROR", "admission is required for admit", "validation", map[string]any{"field": "admission"})
+	}
+	if (input.Action == "create" || input.Action == "get_admission") && input.AdmissionRef == "" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "admission_ref is required", "validation", map[string]any{"field": "admission_ref", "action": input.Action})
 	}
 	if input.Diagnostic != nil && input.Action != "checkpoint" {
 		return input, toolErrorDetails("VALIDATION_ERROR", "diagnostic evidence is only valid for checkpoint", "validation", map[string]any{"field": "diagnostic", "action": input.Action})
@@ -243,6 +260,7 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 func normalizeWorkflowRequest(request WorkflowRequest) workflowTemplateInput {
 	input := workflowTemplateInput{
 		Action:             strings.ToLower(strings.TrimSpace(request.Action)),
+		AdmissionRef:       strings.TrimSpace(request.AdmissionRef),
 		TemplateID:         strings.TrimSpace(request.TemplateID),
 		TemplateIDs:        append([]string(nil), request.TemplateIDs...),
 		TemplateVersion:    strings.TrimSpace(request.TemplateVersion),
@@ -290,10 +308,90 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 	}
 	var task taskstate.Task
 	var evolutionWarning string
+	if taskActionRequiresAdmissionBinding(input.Action) && strings.TrimSpace(input.TaskID) != "" {
+		current, loadErr := s.tasks.Get(input.TaskID)
+		if loadErr != nil {
+			return nil, taskToolError(loadErr)
+		}
+		if bindErr := s.validateTaskAdmissionBinding(current); bindErr != nil {
+			return nil, toolErrorCause("ADMISSION_INTEGRITY_FAILED", "task admission binding failed integrity revalidation", "integrity", map[string]any{
+				"task_id": current.ID, "admission_ref": current.AdmissionRef,
+			}, bindErr)
+		}
+	}
 	switch input.Action {
+	case "admit":
+		admission, createErr := s.tasks.CreateAdmission(*input.Admission)
+		if createErr != nil {
+			return nil, taskToolError(createErr)
+		}
+		next := "Resolve the admission decision frontier before workflow matching."
+		var localMatch *taskstate.WorkflowMatchReceipt
+		if admission.Status == taskstate.AdmissionPass {
+			if strings.TrimSpace(s.config().NexusEndpoint) == "" {
+				match, matchErr := s.tasks.RecordAdmissionWorkflowMatch(admission.ID, taskstate.WorkflowMatchReceiptInput{
+					Type: admission.Contract.WorkflowType, Recommended: "plain_task",
+				})
+				if matchErr != nil {
+					return nil, taskToolError(matchErr)
+				}
+				localMatch = &match
+				next = "No Nexus workflow registry is configured. A deterministic plain_task workflow decision was frozen; create the task with this admission_ref."
+			} else {
+				next = "Call workflow_template_manage match with this admission_ref. Task creation is blocked until that match receipt exists."
+			}
+		} else if admission.Status == taskstate.AdmissionBlocked {
+			next = "Admission is blocked. Address blocked_reasons and create a new admission contract; the frozen admission cannot be edited."
+		}
+		result := Result{
+			"action": input.Action, "admission_ref": admission.ID, "admission_digest": admission.Digest,
+			"admission": admission, "state_dir": s.tasks.Root(), "next_required_action": next,
+		}
+		if localMatch != nil {
+			result["workflow_match"] = *localMatch
+			result["workflow_match_digest"] = localMatch.Digest
+		}
+		return result, nil
+	case "get_admission":
+		admission, getErr := s.tasks.GetAdmission(input.AdmissionRef)
+		if getErr != nil {
+			return nil, taskToolError(getErr)
+		}
+		result := Result{"action": input.Action, "admission_ref": admission.ID, "admission_digest": admission.Digest, "admission": admission, "state_dir": s.tasks.Root()}
+		if match, matchErr := s.tasks.GetAdmissionWorkflowMatch(admission.ID); matchErr == nil {
+			result["workflow_match"] = match
+			result["workflow_match_digest"] = match.Digest
+		}
+		return result, nil
 	case "create":
+		admission, admissionErr := s.tasks.GetAdmission(input.AdmissionRef)
+		if admissionErr != nil {
+			return nil, taskToolError(admissionErr)
+		}
+		if admission.Status != taskstate.AdmissionPass {
+			return nil, toolErrorDetails("ADMISSION_NOT_PASS", "task creation requires a passing admission", "validation", map[string]any{"admission_ref": admission.ID, "status": admission.Status})
+		}
+		match, matchErr := s.tasks.GetAdmissionWorkflowMatch(admission.ID)
+		if matchErr != nil {
+			return nil, toolErrorDetails("WORKFLOW_MATCH_REQUIRED", "workflow_template_manage match must run after admission and before task creation", "validation", map[string]any{"admission_ref": admission.ID})
+		}
+		if strings.TrimSpace(input.Goal) != "" && strings.TrimSpace(input.Goal) != admission.Contract.Goal {
+			return nil, toolErrorDetails("ADMISSION_MISMATCH", "task goal cannot differ from frozen admission goal", "validation", map[string]any{"admission_ref": admission.ID})
+		}
+		if strings.TrimSpace(input.Project) != "" && strings.ToLower(strings.TrimSpace(input.Project)) != admission.Contract.Project {
+			return nil, toolErrorDetails("ADMISSION_MISMATCH", "task project cannot differ from frozen admission project", "validation", map[string]any{"admission_ref": admission.ID})
+		}
+		if strings.TrimSpace(input.Device) != "" && strings.TrimSpace(input.Device) != admission.Contract.Device {
+			return nil, toolErrorDetails("ADMISSION_MISMATCH", "task device cannot differ from frozen admission device", "validation", map[string]any{"admission_ref": admission.ID})
+		}
+		if len(input.CompletionConditions) > 0 && !sameTextList(input.CompletionConditions, admission.Contract.SuccessConditions) {
+			return nil, toolErrorDetails("ADMISSION_MISMATCH", "task completion_conditions cannot differ from frozen admission success_conditions", "validation", map[string]any{"admission_ref": admission.ID})
+		}
+		goal := admission.Contract.Goal
+		project := admission.Contract.Project
+		device := admission.Contract.Device
 		steps := append([]taskstate.TaskStepInput(nil), input.Steps...)
-		conditions := append([]string(nil), input.CompletionConditions...)
+		conditions := append([]string(nil), admission.Contract.SuccessConditions...)
 		requirementRefs := append([]string(nil), input.RequirementRefs...)
 		var sourceTemplates []taskstate.TemplateReference
 		if input.TemplateID != "" && len(input.SourceTemplateIDs) > 0 {
@@ -307,7 +405,6 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 			if len(steps) == 0 {
 				steps = taskStepInputsFromTemplate(template)
 			}
-			conditions = append(append([]string{}, template.CompletionConditions...), conditions...)
 			requirementRefs = mergeUniqueStrings(template.RequirementRefs, requirementRefs)
 			sourceTemplates = []taskstate.TemplateReference{{ID: template.ID, Version: template.Version, Hash: template.Hash, SourceEvolutionID: template.SourceEvolutionID}}
 		}
@@ -315,8 +412,8 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 			if len(input.SourceTemplateIDs) < 2 || len(input.SourceTemplateIDs) > 3 {
 				return nil, taskToolError(fmt.Errorf("source_template_ids must contain 2 or 3 template ids"))
 			}
-			if len(steps) == 0 || len(conditions) == 0 {
-				return nil, toolErrorDetails("TEMPLATE_COMPOSITION_REQUIRED", "multiple source templates require composed steps and completion_conditions", "validation", map[string]any{"source_template_ids": input.SourceTemplateIDs})
+			if len(steps) == 0 {
+				return nil, toolErrorDetails("TEMPLATE_COMPOSITION_REQUIRED", "multiple source templates require composed steps; task acceptance conditions are frozen by admission", "validation", map[string]any{"source_template_ids": input.SourceTemplateIDs})
 			}
 			templates, fetchErr := s.nexusActiveWorkflowTemplates(ctx, input.SourceTemplateIDs)
 			if fetchErr != nil {
@@ -332,13 +429,13 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 			if s.evolution == nil || s.config().NexusEndpoint == "" {
 				return nil, taskToolError(fmt.Errorf("learning_checks require Evolution with Nexus configured"))
 			}
-			preflightTask := taskstate.Task{Project: input.Project, Device: input.Device, SourceTemplates: sourceTemplates}
+			preflightTask := taskstate.Task{Project: project, Device: device, SourceTemplates: sourceTemplates}
 			bindings, err = s.evolution.ValidateBindings(ctx, preflightTask, bindings)
 			if err != nil {
 				return nil, taskToolError(err)
 			}
 		}
-		task, err = s.tasks.CreateWithTraceability(input.Title, input.Goal, input.Project, input.Device, conditions, steps, sourceTemplates, requirementRefs, bindings...)
+		task, err = s.tasks.CreateWithAdmission(admission, match, input.Title, goal, project, device, conditions, steps, sourceTemplates, requirementRefs, bindings...)
 		if err != nil {
 			return nil, taskToolError(err)
 		}
@@ -536,4 +633,34 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 		result["evolution_warning"] = evolutionWarning
 	}
 	return result, nil
+}
+
+func taskActionRequiresAdmissionBinding(action string) bool {
+	switch action {
+	case "checkpoint", "block", "resume", "handoff", "final_review", "complete":
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *Service) validateTaskAdmissionBinding(task taskstate.Task) error {
+	if strings.TrimSpace(task.AdmissionRef) == "" {
+		return nil
+	}
+	admission, err := s.tasks.GetAdmission(task.AdmissionRef)
+	if err != nil {
+		return fmt.Errorf("load admission %s: %w", task.AdmissionRef, err)
+	}
+	if admission.Digest != task.AdmissionDigest {
+		return fmt.Errorf("task admission digest mismatch")
+	}
+	match, err := s.tasks.GetAdmissionWorkflowMatch(task.AdmissionRef)
+	if err != nil {
+		return fmt.Errorf("load workflow match for admission %s: %w", task.AdmissionRef, err)
+	}
+	if match.AdmissionDigest != task.AdmissionDigest || match.Digest != task.WorkflowMatchDigest {
+		return fmt.Errorf("task workflow match digest mismatch")
+	}
+	return nil
 }

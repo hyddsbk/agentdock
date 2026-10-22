@@ -453,12 +453,36 @@ func TestMCPAppsBindResourcesDirectlyToBusinessTools(t *testing.T) {
 		t.Fatalf("file_edit validation structuredContent = %#v", errorResult.StructuredContent)
 	}
 
+	admittedTask, err := harness.session.CallTool(t.Context(), &mcpsdk.CallToolParams{
+		Name: "task_manage",
+		Arguments: map[string]any{
+			"action": "admit",
+			"admission": map[string]any{
+				"goal": "verify direct task UI", "deliverable": "Widget task", "audience": "test harness",
+				"success_conditions": []string{"done"}, "failure_conditions": []string{"task bypasses admission"},
+				"evidence_requirement": "lightweight", "mutation_authority": "local_write", "complexity": "standard",
+			},
+		},
+	})
+	if err != nil || admittedTask.IsError {
+		t.Fatalf("task_manage admit result=%#v err=%v", admittedTask, err)
+	}
+	admittedStructured := admittedTask.StructuredContent.(map[string]any)
+	admissionRef, _ := admittedStructured["admission_ref"].(string)
+	if admittedStructured["workflow_match_digest"] == nil {
+		matchedTask, matchErr := harness.session.CallTool(t.Context(), &mcpsdk.CallToolParams{
+			Name: "workflow_template_manage", Arguments: map[string]any{"action": "match", "admission_ref": admissionRef},
+		})
+		if matchErr != nil || matchedTask.IsError {
+			t.Fatalf("workflow_template_manage match result=%#v err=%v", matchedTask, matchErr)
+		}
+	}
+
 	createdTask, err := harness.session.CallTool(t.Context(), &mcpsdk.CallToolParams{
 		Name: "task_manage",
 		Arguments: map[string]any{
-			"action": "create", "title": "Widget task", "goal": "verify direct task UI",
-			"completion_conditions": []string{"done"},
-			"steps":                 []map[string]any{{"id": "verify", "title": "Verify"}},
+			"action": "create", "title": "Widget task", "admission_ref": admissionRef,
+			"steps": []map[string]any{{"id": "verify", "title": "Verify"}},
 		},
 	})
 	if err != nil || createdTask.IsError {

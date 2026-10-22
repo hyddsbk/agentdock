@@ -66,7 +66,7 @@ func (r *Runtime) agentDockContext(ctx context.Context, nexusLocalOnly bool) (Re
 	if requiresNexus(r.cfg) && !nexusLocalOnly {
 		templates, templateErr := r.templateCapabilityIndex(ctx)
 		if templateErr != nil {
-			contextResult.Warnings = append(contextResult.Warnings, capabilityWarning{Source: "workflow_templates", Message: "工作流模板索引暂不可用；多步骤任务仍应先 workflow_template_manage match。"})
+			contextResult.Warnings = append(contextResult.Warnings, capabilityWarning{Source: "workflow_templates", Message: "工作流模板索引暂不可用；创建持久 Task 前仍应先 task_manage admit，Admission 通过后再尝试 workflow_template_manage match。"})
 		}
 		memoryItems, memoryErr := r.memoryCapabilityIndex(ctx)
 		if memoryErr != nil {
@@ -75,12 +75,18 @@ func (r *Runtime) agentDockContext(ctx context.Context, nexusLocalOnly bool) (Re
 		contextResult.WorkflowTemplates = templates
 		contextResult.Recall = &capabilityRecallContext{Enabled: true, Items: memoryItems}
 		contextResult.Rules = append(contextResult.Rules,
-			"涉及多步骤开发、部署、排障、迁移、Docker、VPS 或 Git 提交推送时，先 workflow_template_manage match；无合适模板时创建普通可恢复任务。",
-			"当多个工作流模板同时适合当前任务时，调用 workflow_template_manage get_many 读取详情；模型必须结合用户目标裁剪、去重、排序并生成最终 steps 和 completion_conditions，再用 source_template_ids 创建任务，服务端不会自动拼接模板。",
+			"创建持久 Task 前先调用 task_manage admit，冻结 deliverable、audience、success/failure conditions、constraints、evidence requirement、mutation authority、complexity 与 decision frontier；只有 Admission=pass 才能继续。",
+			"Admission=pass 后使用同一 admission_ref 调用 workflow_template_manage match；匹配完成后再调用 task_manage create。无合适模板时仍使用该 Admission 创建 plain recoverable task，不得绕过 Admission。",
+			"当多个工作流模板同时适合当前任务时，调用 workflow_template_manage get_many 读取详情；模型只组合 steps、依赖与步骤级 completion_conditions，Task 顶层验收条件由 Admission success_conditions 冻结；再用 admission_ref + source_template_ids 创建任务，服务端不会自动拼接模板。",
 			"普通项目记忆走 recall_*；private_note_manage 只在用户明确要求私密笔记，或内容明显包含 secret、凭据、个人敏感信息时使用。私密检索只返回名称、简介、标签、分类和路径等元数据；正文必须显式 read，Git 只备份 age 密文。",
 		)
 	}
 
+	if !requiresNexus(r.cfg) || nexusLocalOnly {
+		contextResult.Rules = append(contextResult.Rules,
+			"创建持久 Task 前先调用 task_manage admit 冻结标准；Admission=pass 时 standalone runtime 会冻结 plain_task workflow decision，然后才允许 task_manage create。",
+		)
+	}
 	contextResult.Rules = append(contextResult.Rules, "任务执行过程中，在形成有恢复价值的断点时调用 task_manage checkpoint；可用 completed_step_ids/current_step_id 原子批量更新，final_review=pass 不会自动补全未完成步骤。")
 	if requiresNexus(r.cfg) && !nexusLocalOnly {
 		contextResult.Rules = append(contextResult.Rules,

@@ -62,13 +62,24 @@ func TestRuntimeCallEnforcesRequiredEnumBoundsAndOneOf(t *testing.T) {
 
 func TestRuntimeCallEnforcesTaskCreateRequiredFields(t *testing.T) {
 	runtime := newRuntimeValidationTestRuntime(t)
-	valid := map[string]any{
-		"action":                "create",
-		"title":                 "schema contract",
-		"goal":                  "match runtime requirements",
-		"completion_conditions": []any{"task is created"},
+	admitted, err := runtime.Call(context.Background(), "task_manage", map[string]any{
+		"action": "admit",
+		"admission": map[string]any{
+			"goal": "match runtime requirements", "deliverable": "schema-valid task", "audience": "test harness",
+			"success_conditions": []string{"task is created"}, "failure_conditions": []string{"schema bypasses admission"},
+			"evidence_requirement": "lightweight", "mutation_authority": "local_write", "complexity": "standard",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, field := range []string{"title", "goal", "completion_conditions"} {
+	admissionRef := admitted["admission_ref"].(string)
+	valid := map[string]any{
+		"action":        "create",
+		"title":         "schema contract",
+		"admission_ref": admissionRef,
+	}
+	for _, field := range []string{"title", "admission_ref"} {
 		args := make(map[string]any, len(valid)-1)
 		for key, value := range valid {
 			if key != field {

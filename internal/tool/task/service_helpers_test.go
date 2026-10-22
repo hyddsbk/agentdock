@@ -197,12 +197,50 @@ func (s *Service) manageTest(ctx context.Context, input any) (Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	if request.Action == "create" && strings.TrimSpace(request.AdmissionRef) == "" {
+		success := append([]string(nil), request.CompletionConditions...)
+		if len(success) == 0 {
+			success = []string{"test task completes"}
+		}
+		admitted, admitErr := s.Manage(ctx, ManageRequest{
+			Action: "admit",
+			Admission: &taskstate.AdmissionInput{
+				Goal: request.Goal, Deliverable: "test task", Audience: "test harness",
+				SuccessConditions: success, FailureConditions: []string{"test task violates its frozen acceptance contract"},
+				EvidenceRequirement: "lightweight", MutationAuthority: "local_write", Complexity: "standard",
+				Project: request.Project, Device: request.Device,
+			},
+		})
+		if admitErr != nil {
+			return nil, admitErr
+		}
+		ref, _ := admitted["admission_ref"].(string)
+		if _, matchErr := s.WorkflowManage(ctx, WorkflowRequest{Action: "match", AdmissionRef: ref}); matchErr != nil {
+			return nil, matchErr
+		}
+		request.AdmissionRef = ref
+	}
 	return s.Manage(ctx, request)
 }
 func (s *Service) workflowManageTest(ctx context.Context, input any) (Result, error) {
 	request, err := decodeTaskTestRequest[WorkflowRequest](input)
 	if err != nil {
 		return nil, err
+	}
+	if request.Action == "match" && strings.TrimSpace(request.AdmissionRef) == "" {
+		admitted, admitErr := s.Manage(ctx, ManageRequest{
+			Action: "admit",
+			Admission: &taskstate.AdmissionInput{
+				Goal: request.Goal, Deliverable: "workflow test", Audience: "test harness",
+				SuccessConditions: []string{"workflow match completes"}, FailureConditions: []string{"workflow match bypasses admission"},
+				EvidenceRequirement: "lightweight", MutationAuthority: "read_only", Complexity: "standard",
+				WorkflowType: request.Type, Device: request.Device,
+			},
+		})
+		if admitErr != nil {
+			return nil, admitErr
+		}
+		request.AdmissionRef, _ = admitted["admission_ref"].(string)
 	}
 	return s.WorkflowManage(ctx, request)
 }

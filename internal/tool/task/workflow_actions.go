@@ -49,7 +49,7 @@ func (s *Service) WorkflowManage(ctx context.Context, request WorkflowRequest) (
 		}
 		return Result{
 			"action": input.Action, "templates": templates, "count": len(templates), "composition_required": true,
-			"next_required_action": "Combine these templates for the current user goal: prune irrelevant steps, deduplicate them, preserve or rebuild valid depends_on edges, preserve quality metadata or compose a complete Step Quality Contract when used, and merge completion conditions. Then call task_manage create with source_template_ids, composed steps, and completion_conditions.",
+			"next_required_action": "Combine these templates for the frozen Admission: prune irrelevant steps, deduplicate them, preserve or rebuild valid depends_on edges, and preserve quality metadata. Compose only step-level completion conditions; top-level task acceptance remains the Admission success_conditions. Then call task_manage create with admission_ref, source_template_ids, and composed steps.",
 		}, nil
 	case "list":
 		path := "/v1/workflow-templates"
@@ -75,6 +75,9 @@ func (s *Service) WorkflowManage(ctx context.Context, request WorkflowRequest) (
 		}
 		return result, nil
 	case "match":
+		if input.AdmissionRef == "" {
+			return nil, toolErrorDetails("VALIDATION_ERROR", "admission_ref is required for workflow matching", "validation", map[string]any{"field": "admission_ref"})
+		}
 		return s.matchWorkflowTemplates(ctx, input)
 	case "vector_index":
 		result, err := s.nexusWorkflowJSON(ctx, "GET", "/v1/workflow-templates/vector-index", nil)
@@ -101,8 +104,46 @@ func compactNexusTemplateMutationResult(result Result, err error) (Result, error
 }
 
 func (s *Service) matchWorkflowTemplates(ctx context.Context, input workflowTemplateInput) (Result, error) {
-	request := workflowTemplateMatchRequest{Goal: input.Goal, Device: input.Device, Type: input.Type}
-	return s.nexusWorkflowJSON(ctx, "POST", "/v1/workflow-templates/match", request)
+	admission, err := s.tasks.GetAdmission(input.AdmissionRef)
+	if err != nil {
+		return nil, taskToolError(err)
+	}
+	if admission.Status != taskstate.AdmissionPass {
+		return nil, toolErrorDetails("ADMISSION_NOT_PASS", "workflow matching requires a passing admission", "validation", map[string]any{"admission_ref": admission.ID, "status": admission.Status})
+	}
+	if strings.TrimSpace(input.Goal) != "" && strings.TrimSpace(input.Goal) != admission.Contract.Goal {
+		return nil, toolErrorDetails("ADMISSION_MISMATCH", "workflow match goal cannot differ from frozen admission goal", "validation", map[string]any{"admission_ref": admission.ID})
+	}
+	if strings.TrimSpace(input.Device) != "" && strings.TrimSpace(input.Device) != admission.Contract.Device {
+		return nil, toolErrorDetails("ADMISSION_MISMATCH", "workflow match device cannot differ from frozen admission device", "validation", map[string]any{"admission_ref": admission.ID})
+	}
+	if strings.TrimSpace(input.Type) != "" && strings.TrimSpace(input.Type) != admission.Contract.WorkflowType {
+		return nil, toolErrorDetails("ADMISSION_MISMATCH", "workflow match type cannot differ from frozen admission workflow_type", "validation", map[string]any{"admission_ref": admission.ID})
+	}
+	request := workflowTemplateMatchRequest{Goal: admission.Contract.Goal, Device: admission.Contract.Device, Type: admission.Contract.WorkflowType}
+	result, err := s.nexusWorkflowJSON(ctx, "POST", "/v1/workflow-templates/match", request)
+	if err != nil {
+		return nil, err
+	}
+	var candidates []taskstate.TemplateCandidate
+	if raw := result["candidates"]; raw != nil {
+		_ = remarshal(raw, &candidates)
+	}
+	candidateIDs := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		candidateIDs = append(candidateIDs, candidate.ID)
+	}
+	receipt, err := s.tasks.RecordAdmissionWorkflowMatch(admission.ID, taskstate.WorkflowMatchReceiptInput{
+		Type: admission.Contract.WorkflowType, Recommended: fmt.Sprint(result["recommended"]), CandidateIDs: candidateIDs,
+	})
+	if err != nil {
+		return nil, taskToolError(err)
+	}
+	result["admission_ref"] = admission.ID
+	result["admission_digest"] = admission.Digest
+	result["workflow_match_digest"] = receipt.Digest
+	result["next_required_action"] = "Create the task with task_manage create using this admission_ref. Goal, project, device, and acceptance conditions are derived from the frozen admission."
+	return result, nil
 }
 
 func (s *Service) nexusActiveWorkflowTemplates(ctx context.Context, ids []string) ([]taskstate.Template, error) {

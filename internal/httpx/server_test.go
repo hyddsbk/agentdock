@@ -205,12 +205,28 @@ func TestRuntimeAPIDeletesOnlySelectedTask(t *testing.T) {
 	}
 	createTask := func(title string) string {
 		t.Helper()
+		admitted, err := runtime.Call(context.Background(), "task_manage", map[string]any{
+			"action": "admit",
+			"admission": map[string]any{
+				"goal": "Verify Runtime API task deletion", "deliverable": "deletable runtime task", "audience": "test harness",
+				"success_conditions": []string{"only the selected task is deleted"}, "failure_conditions": []string{"another task is deleted"},
+				"evidence_requirement": "lightweight", "mutation_authority": "local_write", "complexity": "standard",
+			},
+		})
+		if err != nil {
+			t.Fatalf("admit task: %v", err)
+		}
+		admissionRef := admitted["admission_ref"].(string)
+		if admitted["workflow_match_digest"] == nil {
+			if _, err := runtime.Call(context.Background(), "workflow_template_manage", map[string]any{"action": "match", "admission_ref": admissionRef}); err != nil {
+				t.Fatalf("match task workflow: %v", err)
+			}
+		}
 		created, err := runtime.Call(context.Background(), "task_manage", map[string]any{
-			"action":                "create",
-			"title":                 title,
-			"goal":                  "Verify Runtime API task deletion",
-			"steps":                 []map[string]any{{"id": "verify", "title": "Verify deletion"}},
-			"completion_conditions": []string{"only the selected task is deleted"},
+			"action":        "create",
+			"title":         title,
+			"admission_ref": admissionRef,
+			"steps":         []map[string]any{{"id": "verify", "title": "Verify deletion"}},
 		})
 		if err != nil {
 			t.Fatalf("create task: %v", err)

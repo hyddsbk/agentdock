@@ -195,7 +195,7 @@ func TestFinalReviewRejectsBlockingUnknownEvenWhenAcknowledged(t *testing.T) {
 	}
 }
 
-func TestTaskSchema10MigratesToEvidenceSemanticsSchema(t *testing.T) {
+func TestTaskSchema10MigratesThroughAdmissionSchema(t *testing.T) {
 	data, err := json.Marshal(Task{SchemaVersion: outcomeSchemaVersion, ID: "tsk_0123456789abcdef"})
 	if err != nil {
 		t.Fatal(err)
@@ -204,8 +204,8 @@ func TestTaskSchema10MigratesToEvidenceSemanticsSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if task.SchemaVersion != SchemaVersion || SchemaVersion != 11 {
-		t.Fatalf("schema version = %d want 11", task.SchemaVersion)
+	if task.SchemaVersion != SchemaVersion || SchemaVersion != 12 {
+		t.Fatalf("schema version = %d want 12", task.SchemaVersion)
 	}
 }
 

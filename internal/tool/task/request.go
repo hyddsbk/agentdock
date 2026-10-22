@@ -50,6 +50,8 @@ type ProvenanceQueryRequest struct {
 // 持久化状态中的 phase、bound_at 等内部字段在规范化阶段由 Task 域模型补齐，不能从边界注入。
 type ManageRequest struct {
 	Action                 string                            `json:"action"`
+	Admission              *taskstate.AdmissionInput         `json:"admission,omitempty"`
+	AdmissionRef           string                            `json:"admission_ref,omitempty"`
 	Title                  string                            `json:"title,omitempty"`
 	Goal                   string                            `json:"goal,omitempty"`
 	Project                string                            `json:"project,omitempty"`
@@ -95,6 +97,7 @@ type ManageRequest struct {
 // WorkflowRequest 是 workflow_template_manage 的强类型输入。
 type WorkflowRequest struct {
 	Action             string              `json:"action"`
+	AdmissionRef       string              `json:"admission_ref,omitempty"`
 	TemplateID         string              `json:"template_id,omitempty"`
 	TemplateIDs        []string            `json:"template_ids,omitempty"`
 	TemplateVersion    string              `json:"template_version,omitempty"`

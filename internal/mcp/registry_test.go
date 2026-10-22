@@ -262,8 +262,8 @@ func assertObjectSchema(t *testing.T, name, kind string, schema map[string]any) 
 
 func TestTaskManageSchemaExposesLifecycleActions(t *testing.T) {
 	props := schemaProperties(t, "task_manage")
-	assertSameStrings(t, enumStrings(t, props["action"]), []string{"create", "list", "get", "backtrace", "revalidate", "export_audit_bundle", "verify_audit_bundle", "export_signed_audit_bundle", "verify_signed_audit_bundle", "verify_signed_audit_bundle_online", "checkpoint", "block", "resume", "handoff", "final_review", "complete"})
-	for _, name := range []string{"completion_conditions", "steps", "step_id", "completed_step_ids", "current_step_id", "next_step_id", "context_refs", "status", "summary", "verified", "risks", "provenance_query", "review_revision", "audit_bundle", "audit_signature", "audit_trust_registry", "audit_trust_checkpoint", "expected_root_key_id", "expected_trust_revision", "expected_bundle_sha256"} {
+	assertSameStrings(t, enumStrings(t, props["action"]), []string{"admit", "get_admission", "create", "list", "get", "backtrace", "revalidate", "export_audit_bundle", "verify_audit_bundle", "export_signed_audit_bundle", "verify_signed_audit_bundle", "verify_signed_audit_bundle_online", "checkpoint", "block", "resume", "handoff", "final_review", "complete"})
+	for _, name := range []string{"admission", "admission_ref", "completion_conditions", "steps", "step_id", "completed_step_ids", "current_step_id", "next_step_id", "context_refs", "status", "summary", "verified", "risks", "provenance_query", "review_revision", "audit_bundle", "audit_signature", "audit_trust_registry", "audit_trust_checkpoint", "expected_root_key_id", "expected_trust_revision", "expected_bundle_sha256"} {
 		if _, ok := props[name]; !ok {
 			t.Fatalf("task_manage input schema missing %q", name)
 		}
@@ -280,7 +280,7 @@ func TestTaskManageSchemaExposesLifecycleActions(t *testing.T) {
 
 	templateProps := schemaProperties(t, "workflow_template_manage")
 	assertSameStrings(t, enumStrings(t, templateProps["action"]), []string{"publish", "retire", "list", "get", "get_many", "match", "vector_index"})
-	for _, name := range []string{"template", "template_id", "template_ids", "template_version", "template_status", "allow_long_template", "long_template_reason", "goal", "device", "type"} {
+	for _, name := range []string{"admission_ref", "template", "template_id", "template_ids", "template_version", "template_status", "allow_long_template", "long_template_reason", "goal", "device", "type"} {
 		if _, ok := templateProps[name]; !ok {
 			t.Fatalf("workflow_template_manage input schema missing %q", name)
 		}
@@ -290,7 +290,7 @@ func TestTaskManageSchemaExposesLifecycleActions(t *testing.T) {
 	if !ok {
 		t.Fatal("task_manage output schema properties missing")
 	}
-	for _, name := range []string{"task_id", "task", "task_summary", "resume_context", "next_required_action", "tasks", "count", "state_dir"} {
+	for _, name := range []string{"admission_ref", "admission_digest", "admission", "workflow_match", "workflow_match_digest", "task_id", "task", "task_summary", "resume_context", "next_required_action", "tasks", "count", "state_dir"} {
 		if _, ok := outputProps[name]; !ok {
 			t.Fatalf("task_manage output schema missing %q", name)
 		}

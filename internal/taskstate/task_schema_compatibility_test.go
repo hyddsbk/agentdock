@@ -55,8 +55,8 @@ func TestTaskSchemaCompatibilityNewTaskPersistsSchema11(t *testing.T) {
 	if err := json.Unmarshal(raw, &persisted); err != nil {
 		t.Fatal(err)
 	}
-	if persisted.SchemaVersion != SchemaVersion || SchemaVersion != 11 {
-		t.Fatalf("persisted schema=%d current=%d, want 11", persisted.SchemaVersion, SchemaVersion)
+	if persisted.SchemaVersion != SchemaVersion || SchemaVersion != 12 {
+		t.Fatalf("persisted schema=%d current=%d, want 12", persisted.SchemaVersion, SchemaVersion)
 	}
 }
 
@@ -71,7 +71,7 @@ func TestTaskSchemaCompatibilityLegacyTaskSchemaCannotBeWrittenDirectly(t *testi
 		if err == nil {
 			t.Fatalf("schema %d write unexpectedly succeeded", version)
 		}
-		if !strings.Contains(err.Error(), "current writable schema is 11") {
+		if !strings.Contains(err.Error(), "current writable schema is 12") {
 			t.Fatalf("schema %d write error = %v", version, err)
 		}
 	}

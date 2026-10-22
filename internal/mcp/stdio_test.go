@@ -243,7 +243,7 @@ func TestFreshMCPClientCanCompleteTwoAxisTaskLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	schemaText := string(encoded)
-	for _, field := range []string{"intent_spec", "engineering_policy", "verified_evidence"} {
+	for _, field := range []string{"admission", "admission_ref", "intent_spec", "engineering_policy", "verified_evidence"} {
 		if !strings.Contains(schemaText, `"`+field+`"`) {
 			t.Fatalf("fresh task_manage schema missing %s: %s", field, schemaText)
 		}
@@ -265,12 +265,26 @@ func TestFreshMCPClientCanCompleteTwoAxisTaskLifecycle(t *testing.T) {
 		return structured
 	}
 
+	admitted := call(map[string]any{
+		"action": "admit",
+		"admission": map[string]any{
+			"goal": "verify fresh MCP task contract", "deliverable": "MCP schema lifecycle task", "audience": "test harness",
+			"success_conditions": []string{"fresh MCP final review passes"}, "failure_conditions": []string{"MCP task bypasses admission"},
+			"evidence_requirement": "lightweight", "mutation_authority": "local_write", "complexity": "standard",
+		},
+	})
+	admissionRef := admitted["admission_ref"].(string)
+	if admitted["workflow_match_digest"] == nil {
+		matched, matchErr := session.CallTool(ctx, &mcpsdk.CallToolParams{
+			Name: "workflow_template_manage", Arguments: map[string]any{"action": "match", "admission_ref": admissionRef},
+		})
+		if matchErr != nil || matched.IsError {
+			t.Fatalf("workflow_template_manage match failed: result=%#v err=%v", matched, matchErr)
+		}
+	}
 	created := call(map[string]any{
-		"action":                "create",
-		"title":                 "MCP schema lifecycle",
-		"goal":                  "verify fresh MCP task contract",
-		"completion_conditions": []string{"fresh MCP final review passes"},
-		"steps":                 []map[string]any{{"id": "verify", "title": "Verify"}},
+		"action": "create", "title": "MCP schema lifecycle", "admission_ref": admissionRef,
+		"steps": []map[string]any{{"id": "verify", "title": "Verify"}},
 	})
 	taskID, _ := created["task_id"].(string)
 	if taskID == "" {

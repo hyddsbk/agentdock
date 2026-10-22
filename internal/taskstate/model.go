@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	SchemaVersion             = 11
+	SchemaVersion             = 12
 	legacySchemaVersion       = 1
 	dependencySchemaVersion   = 2
 	contextSchemaVersion      = 3
@@ -17,6 +17,7 @@ const (
 	tddSchemaVersion          = 8
 	executionSchemaVersion    = 9
 	outcomeSchemaVersion      = 10
+	evidenceSchemaVersion     = 11
 	FinalReviewPass           = "pass"
 	FinalReviewFailed         = "failed"
 
@@ -136,6 +137,9 @@ type Task struct {
 	ID                    string                 `json:"id"`
 	Title                 string                 `json:"title"`
 	Goal                  string                 `json:"goal"`
+	AdmissionRef          string                 `json:"admission_ref,omitempty"`
+	AdmissionDigest       string                 `json:"admission_digest,omitempty"`
+	WorkflowMatchDigest   string                 `json:"workflow_match_digest,omitempty"`
 	Project               string                 `json:"project,omitempty"`
 	Device                string                 `json:"device,omitempty"`
 	Status                Status                 `json:"status"`

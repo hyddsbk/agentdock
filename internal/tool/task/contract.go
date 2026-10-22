@@ -11,11 +11,13 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 	stringProp := toolcontract.String
 	boundedIntProp := toolcontract.BoundedInteger
 	props := map[string]any{
-		"action":                   map[string]any{"type": "string", "description": "Task lifecycle and read-only audit action. Use checkpoint to update progress and handoff to persist a fresh-session resume packet.", "enum": []string{"create", "list", "get", "backtrace", "revalidate", "export_audit_bundle", "verify_audit_bundle", "export_signed_audit_bundle", "verify_signed_audit_bundle", "verify_signed_audit_bundle_online", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}},
+		"action":                   map[string]any{"type": "string", "description": "Task admission, lifecycle, and read-only audit action. Use admit before workflow matching and create; use checkpoint to update progress.", "enum": []string{"admit", "get_admission", "create", "list", "get", "backtrace", "revalidate", "export_audit_bundle", "verify_audit_bundle", "export_signed_audit_bundle", "verify_signed_audit_bundle", "verify_signed_audit_bundle_online", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}},
+		"admission":                admissionInputSchema(),
+		"admission_ref":            stringProp("Immutable admission reference. Required for get_admission and create; workflow matching uses the same reference."),
 		"task_id":                  stringProp("Persistent task id for get, backtrace scope, revalidate, export_audit_bundle, checkpoint, block, resume, handoff, final_review, or complete."),
 		"title":                    stringProp("Short task title. Required for action=create."),
-		"goal":                     stringProp("Fixed task goal. Required for action=create."),
-		"completion_conditions":    map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string"}, "description": "Conditions that must be true before final_review can pass. Required for action=create."},
+		"goal":                     stringProp("Optional create-time echo of the frozen admission goal. When supplied it must match exactly."),
+		"completion_conditions":    map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string"}, "description": "Optional create-time echo of frozen admission success_conditions. When supplied it must match exactly."},
 		"requirement_refs":         map[string]any{"type": "array", "maxItems": 32, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Optional authoritative requirement/spec pointers for traceable work. Every ref must be mapped by at least one step; do not copy spec prose here."},
 		"step_id":                  stringProp("Task step id for a single-step checkpoint."),
 		"tdd_seam":                 tddSeamInputSchema(),
@@ -78,6 +80,37 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 		},
 	}
 	return taskManageInputObject(props)
+}
+
+func admissionInputSchema() map[string]any {
+	stringArray := func(description string, minItems int) map[string]any {
+		schema := map[string]any{"type": "array", "maxItems": 32, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": description}
+		if minItems > 0 {
+			schema["minItems"] = minItems
+		}
+		return schema
+	}
+	return map[string]any{
+		"type": "object", "additionalProperties": false,
+		"required":    []string{"goal", "deliverable", "audience", "success_conditions", "failure_conditions", "evidence_requirement", "mutation_authority", "complexity"},
+		"description": "Standards-first admission contract frozen before workflow matching and task creation.",
+		"properties": map[string]any{
+			"goal":                 map[string]any{"type": "string"},
+			"deliverable":          map[string]any{"type": "string"},
+			"audience":             map[string]any{"type": "string"},
+			"success_conditions":   stringArray("Conditions that define successful delivery.", 1),
+			"failure_conditions":   stringArray("Conditions that make execution unacceptable or failed.", 1),
+			"constraints":          stringArray("Hard constraints and red lines.", 0),
+			"evidence_requirement": map[string]any{"type": "string", "enum": []string{"none", "lightweight", "research", "first_party", "execution_receipt"}},
+			"mutation_authority":   map[string]any{"type": "string", "enum": []string{"read_only", "local_write", "staging_write", "production_write"}},
+			"complexity":           map[string]any{"type": "string", "enum": []string{"trivial", "standard", "substantial", "high_risk"}},
+			"workflow_type":        map[string]any{"type": "string", "description": "Optional frozen workflow type hint used by workflow template matching."},
+			"decision_frontier":    stringArray("Unresolved decisions. Any entry makes admission status resolve.", 0),
+			"blocked_reasons":      stringArray("Known blockers. Any entry makes admission status blocked.", 0),
+			"project":              map[string]any{"type": "string"},
+			"device":               map[string]any{"type": "string"},
+		},
+	}
 }
 
 func openAuditObjectSchema(description string) map[string]any {
@@ -263,10 +296,24 @@ func taskManageInputObject(props map[string]any) map[string]any {
 	schema["allOf"] = []any{
 		map[string]any{
 			"if": map[string]any{
+				"properties": map[string]any{"action": map[string]any{"const": "admit"}},
+				"required":   []string{"action"},
+			},
+			"then": map[string]any{"required": []string{"admission"}},
+		},
+		map[string]any{
+			"if": map[string]any{
+				"properties": map[string]any{"action": map[string]any{"const": "get_admission"}},
+				"required":   []string{"action"},
+			},
+			"then": map[string]any{"required": []string{"admission_ref"}},
+		},
+		map[string]any{
+			"if": map[string]any{
 				"properties": map[string]any{"action": map[string]any{"const": "create"}},
 				"required":   []string{"action"},
 			},
-			"then": map[string]any{"required": []string{"title", "goal", "completion_conditions"}},
+			"then": map[string]any{"required": []string{"title", "admission_ref"}},
 		},
 		map[string]any{
 			"if": map[string]any{
@@ -321,6 +368,11 @@ func ManageOutputSchema(cfg config.Config) map[string]any {
 	objectProp := toolcontract.OpenObject
 	props := map[string]any{
 		"action":                  stringProp("Completed task action."),
+		"admission_ref":           stringProp("Immutable standards-first admission reference."),
+		"admission_digest":        stringProp("SHA-256 digest of the frozen admission contract."),
+		"admission":               objectProp("Frozen admission contract returned by admit or get_admission."),
+		"workflow_match":          objectProp("Persisted workflow-match receipt when available."),
+		"workflow_match_digest":   stringProp("SHA-256 digest of the workflow-match receipt bound to the admission."),
 		"task_id":                 stringProp("Persistent task id returned by create and usable with task lifecycle actions."),
 		"task":                    objectProp("Full persistent task state returned only by get."),
 		"task_summary":            objectProp("Compact task summary returned by task lifecycle actions."),

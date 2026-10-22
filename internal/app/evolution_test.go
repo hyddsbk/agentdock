@@ -19,6 +19,13 @@ func TestTaskFinalReviewAutomaticallyResolvesPreboundLearningCheck(t *testing.T)
 		defer mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
+		case "/v1/workflow-templates/match":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok": true, "action": "match", "candidates": []any{}, "count": 0,
+				"recommended": "plain_task", "best_candidate_score": 0,
+				"score_thresholds": map[string]any{"recommended": 0.75}, "composition_required": false,
+				"next_required_action": "create plain task",
+			})
 		case "/internal/recall/lifecycle/query":
 			var query struct {
 				Query       string   `json:"query"`
@@ -91,10 +98,27 @@ func TestTaskFinalReviewAutomaticallyResolvesPreboundLearningCheck(t *testing.T)
 	assertToolResultMatchestestOutputSchema(t, "evolve", proposed)
 	evolutionID := proposed["evolution_id"].(string)
 
+	admitted, err := runtime.Call(t.Context(), "task_manage", map[string]any{
+		"action": "admit",
+		"admission": map[string]any{
+			"goal": "验证预绑定经验", "deliverable": "经过验证的预绑定经验结果", "audience": "AgentDock maintainers",
+			"success_conditions": []string{"有真实结果"}, "failure_conditions": []string{"未冻结标准就开始执行"},
+			"evidence_requirement": "lightweight", "mutation_authority": "local_write", "complexity": "standard",
+			"workflow_type": "development", "project": "agentdock",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	admissionRef := admitted["admission_ref"].(string)
+	if admitted["workflow_match_digest"] == nil {
+		if _, err := runtime.Call(t.Context(), "workflow_template_manage", map[string]any{"action": "match", "admission_ref": admissionRef}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	created, err := runtime.Call(t.Context(), "task_manage", map[string]any{
-		"action": "create", "title": "验证自动解析", "goal": "验证预绑定经验", "project": "agentdock",
-		"completion_conditions": []string{"有真实结果"},
-		"steps":                 []map[string]any{{"id": "observe", "title": "观察真实结果"}},
+		"action": "create", "title": "验证自动解析", "admission_ref": admissionRef,
+		"steps": []map[string]any{{"id": "observe", "title": "观察真实结果"}},
 		"learning_checks": []map[string]any{{
 			"evolution_id": evolutionID, "on_success": "support", "on_failure": "contradict",
 		}},

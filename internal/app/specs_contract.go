@@ -45,6 +45,41 @@ func canonicalToolContract(name string, _ config.Config) (ToolContract, bool) {
 	return ToolContract{InputSchema: inputSchema, OutputSchema: outputSchema}, true
 }
 
+func workflowTaskContract(name string, cfg config.Config) (ToolContract, bool) {
+	contract, ok := canonicalToolContract(name, cfg)
+	if !ok || name != "workflow_template_manage" {
+		return contract, ok
+	}
+	inputProps, ok := contract.InputSchema["properties"].(map[string]any)
+	if !ok {
+		return ToolContract{}, false
+	}
+	inputProps["admission_ref"] = map[string]any{
+		"type":        "string",
+		"description": "Passing frozen Task Admission reference. Required for action=match.",
+	}
+	allOf, _ := contract.InputSchema["allOf"].([]any)
+	contract.InputSchema["allOf"] = append(allOf, map[string]any{
+		"if": map[string]any{
+			"properties": map[string]any{"action": map[string]any{"const": "match"}},
+			"required":   []string{"action"},
+		},
+		"then": map[string]any{"required": []string{"admission_ref"}},
+	})
+	outputProps, ok := contract.OutputSchema["properties"].(map[string]any)
+	if !ok {
+		return ToolContract{}, false
+	}
+	for name, description := range map[string]string{
+		"admission_ref":         "Frozen Task Admission reference consumed by workflow matching.",
+		"admission_digest":      "SHA-256 digest of the frozen Admission contract.",
+		"workflow_match_digest": "SHA-256 digest of the persisted workflow-match receipt.",
+	} {
+		outputProps[name] = map[string]any{"type": "string", "description": description}
+	}
+	return contract, true
+}
+
 func fileToolContract(name string, _ config.Config) (ToolContract, bool) {
 	return staticToolContract(name, toolfile.InputSchema, toolfile.OutputSchema)
 }

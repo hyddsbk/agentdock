@@ -346,6 +346,9 @@ func applyFinalReview(task *Task, input FinalReviewInput, now time.Time) error {
 	if status != FinalReviewPass && status != FinalReviewFailed {
 		return errors.New("final review status must be pass or failed")
 	}
+	if status == FinalReviewPass && task.ImprovementExperiment != nil && task.ImprovementExperiment.Status != ImprovementStatusComposed {
+		return errors.New("passing final review requires improvement_experiment to reach composed state")
+	}
 	summary := strings.TrimSpace(input.Summary)
 	if summary == "" {
 		return errors.New("final review summary is required")

@@ -1,7 +1,7 @@
 ---
 name: skill-authoring
 description: 创建、设计、修改、升级、重构和验证 AgentDock Skill 时使用；负责可移植核心、文档、引用、辅助脚本、测试、版本和本地安装验证。
-version: 1.4.0
+version: 1.5.0
 ---
 
 # Skill Authoring
@@ -43,6 +43,7 @@ version: 1.4.0
 9. 第一方 Skill 必须通过本 Skill 的 `lint`，不能只通过包安装校验。
 10. 当工作由 `project-due-diligence/adoption-plan/v1` 驱动时，计划是第一方改写的不可放宽输入：保留 `plan_sha256`，只实现 `approved_units`，不得把 `excluded_components` 以重命名、wrapper、依赖或“兼容层”形式重新带回。ADAPT/EXTRACT 的 `first_party_reimplementation=true` 时，不得直接包装原 upstream runtime/installer/updater 来冒充重实现。
 11. 对 receipt-enabled adoption plan，第一方产物完成 lint/tests/package validation 后必须计算该产物的内容 SHA-256，并通过 `project-due-diligence` receipt validator 追加 `author-package` receipt。该 receipt 绑定 plan SHA-256、review/source snapshot、approved component set、产物 digest 和本轮 authoring 验收结果 digest；没有有效 receipt 的产物不得作为该 adoption plan 的下游输入。
+12. 新增或调整模型指令时先做 harness surface cost 判断：有稳定触发条件的流程优先放 Skill，确定性操作优先 helper，大输入小输出的调查可用 subagent，必须不可跳过的规则放 runtime gate/hook；always-on prose 只保留真正每轮都适用的短规则。完整规则见 `references/harness-surface-cost.md`。
 
 完整规范见包内 `references/skill-package-spec.md`。
 

@@ -1,0 +1,77 @@
+{
+  "schema": "project-due-diligence/adoption-plan/v1",
+  "subject": "google-research/harness2",
+  "verdict": "EXTRACT",
+  "source_snapshot": {
+    "kind": "commit",
+    "value": "1cfe254e8d25b15f37048c3730134686abe60335",
+    "immutable": true
+  },
+  "approved_units": [
+    "propose-probe-compose task-owned experiment protocol",
+    "parallel and sequential refinement modes",
+    "base invariant project alternative candidate scopes",
+    "blind candidate evaluation with opaque aliases",
+    "evidence-is-data isolation",
+    "cost-aware harness surface placement",
+    "candidate-only evolution handoff"
+  ],
+  "excluded_components": [
+    {
+      "name": "Harness2 executor/runtime",
+      "kind": "runtime",
+      "reason": "Competes with AgentDock execution and permission boundaries; upstream Codex path may disable sandbox."
+    },
+    {
+      "name": "Harness2 setup and dependency bootstrap",
+      "kind": "installer",
+      "reason": "Clones, downloads, patches, and installs third-party benchmark/runtime dependencies outside the approved extraction boundary."
+    },
+    {
+      "name": "Harness2 OpenCode/Codex substrate",
+      "kind": "dependency",
+      "reason": "AgentDock already owns executor and ACP/tool execution surfaces."
+    },
+    {
+      "name": "Harness2 experience library",
+      "kind": "authority",
+      "reason": "Would create a second persistent learning/memory authority beside Evolution and Recall."
+    },
+    {
+      "name": "Harness2 orchestration and selector authority",
+      "kind": "authority",
+      "reason": "Task, Workflow, Final Review, and Evolution remain AgentDock-owned."
+    },
+    {
+      "name": "Harness2 benchmark stack",
+      "kind": "component",
+      "reason": "Research evaluation stack is unnecessary for the first-party protocol extraction."
+    }
+  ],
+  "handoff": {
+    "immediate_owner": "skill-authoring",
+    "allowed_next_owners": [
+      "skill-authoring",
+      "skill-dev"
+    ]
+  },
+  "requirements": {
+    "sandbox_validation": true,
+    "rollback_plan": false,
+    "package_security_review": false,
+    "first_party_reimplementation": true,
+    "unresolved_conditions": []
+  },
+  "forbidden_actions": [
+    "install-upstream-package",
+    "execute-upstream-runtime",
+    "copy-excluded-runtime",
+    "delegate-upstream-authority",
+    "reintroduce-excluded-component",
+    "direct-production-install"
+  ],
+  "execution_allowed": true,
+  "decision_binding": {
+    "review_digest": "ac22fa191c253b4c25a12839ae6c0c3f5ca8a2e9554608b8756918734e176336"
+  }
+}

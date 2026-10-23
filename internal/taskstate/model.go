@@ -6,20 +6,21 @@ import (
 )
 
 const (
-	SchemaVersion             = 12
-	legacySchemaVersion       = 1
-	dependencySchemaVersion   = 2
-	contextSchemaVersion      = 3
-	qualitySchemaVersion      = 4
-	diagnosticSchemaVersion   = 5
-	handoffSchemaVersion      = 6
-	traceabilitySchemaVersion = 7
-	tddSchemaVersion          = 8
-	executionSchemaVersion    = 9
-	outcomeSchemaVersion      = 10
-	evidenceSchemaVersion     = 11
-	FinalReviewPass           = "pass"
-	FinalReviewFailed         = "failed"
+	SchemaVersion              = 13
+	legacySchemaVersion        = 1
+	dependencySchemaVersion    = 2
+	contextSchemaVersion       = 3
+	qualitySchemaVersion       = 4
+	diagnosticSchemaVersion    = 5
+	handoffSchemaVersion       = 6
+	traceabilitySchemaVersion  = 7
+	tddSchemaVersion           = 8
+	executionSchemaVersion     = 9
+	outcomeSchemaVersion       = 10
+	evidenceSchemaVersion      = 11
+	admissionTaskSchemaVersion = 12
+	FinalReviewPass            = "pass"
+	FinalReviewFailed          = "failed"
 
 	maxTaskTitleBytes        = 512
 	maxTaskGoalBytes         = 16 << 10
@@ -157,6 +158,7 @@ type Task struct {
 	EvolutionGuidanceSeen []string               `json:"evolution_guidance_seen,omitempty"`
 	EvolutionCandidates   []EvolutionContextItem `json:"evolution_candidates,omitempty"`
 	EvolutionBindings     []EvolutionBinding     `json:"evolution_bindings,omitempty"`
+	ImprovementExperiment *ImprovementExperiment `json:"improvement_experiment,omitempty"`
 	Unknowns              []UnknownRecord        `json:"unknowns,omitempty"`
 	FinalReview           *FinalReview           `json:"final_review,omitempty"`
 	CreatedAt             time.Time              `json:"created_at"`

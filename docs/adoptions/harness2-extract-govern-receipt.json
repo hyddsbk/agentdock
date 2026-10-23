@@ -1,0 +1,29 @@
+{
+    "schema":  "project-due-diligence/execution-receipt/v1",
+    "plan_sha256":  "58ed7c0e731566838f0d8294e2b3944d480fdd6af0e2924045e35ad4093119f4",
+    "review_digest":  "ac22fa191c253b4c25a12839ae6c0c3f5ca8a2e9554608b8756918734e176336",
+    "source_snapshot":  {
+                            "kind":  "commit",
+                            "value":  "1cfe254e8d25b15f37048c3730134686abe60335"
+                        },
+    "sequence":  2,
+    "previous_receipt_sha256":  "70d9929c858c176fd0e96cb6b7f436e9fc97f0a751bb3b58d0f768ba88bb4f8d",
+    "owner":  "skill-dev",
+    "action":  "govern-package",
+    "components":  [
+                       "propose-probe-compose task-owned experiment protocol",
+                       "parallel and sequential refinement modes",
+                       "base invariant project alternative candidate scopes",
+                       "blind candidate evaluation with opaque aliases",
+                       "evidence-is-data isolation",
+                       "cost-aware harness surface placement",
+                       "candidate-only evolution handoff"
+                   ],
+    "result":  "success",
+    "artifact":  {
+                     "input_sha256":  "4d481a59548a2292372ade63e94b904bfa657cd7ef9e2336d3c29ff878be4913",
+                     "output_sha256":  "4d481a59548a2292372ade63e94b904bfa657cd7ef9e2336d3c29ff878be4913",
+                     "result_sha256":  "b92f4e3fc83986552ca2b08e22b42bd6f168e29a684d1da9dc8f5db8700e57d7"
+                 },
+    "receipt_sha256":  "e67ab8a363790261289a456cba2d276939778bcb14e81121b3a31bfe8d8629b3"
+}

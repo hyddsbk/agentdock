@@ -1,0 +1,41 @@
+{
+  "schema": "agentdock-extraction-governance/v1",
+  "subject": "google-research/harness2",
+  "plan_sha256": "58ed7c0e731566838f0d8294e2b3944d480fdd6af0e2924045e35ad4093119f4",
+  "artifact_sha256": "4d481a59548a2292372ade63e94b904bfa657cd7ef9e2336d3c29ff878be4913",
+  "verdict": "pass",
+  "checks": {
+    "authority_collision": {
+      "status": "pass",
+      "finding": "Recursive improvement is an optional Task-owned contract; Task, Workflow, Final Review, Evolution, Recall, execution attestation, and provenance authorities remain AgentDock-owned."
+    },
+    "runtime_exclusion": {
+      "status": "pass",
+      "finding": "No Harness2 runtime, installer, OpenCode/Codex substrate, benchmark stack, or experience library was imported or added as a dependency."
+    },
+    "blind_evaluation": {
+      "status": "pass",
+      "finding": "Evaluator projection uses opaque aliases and separately staged identity-neutral blind_artifact_ref values; author/provenance artifact refs and raw probe evidence refs are withheld."
+    },
+    "evolution_boundary": {
+      "status": "pass",
+      "finding": "Composition may emit only a candidate handoff when Nexus is enabled; it does not write Recall or mutate Evolution support/contradict counts."
+    },
+    "surface_cost": {
+      "status": "pass",
+      "finding": "First-party skill-authoring guidance now prefers on-demand Skill/helper/subagent/runtime enforcement over always-on prose when appropriate."
+    },
+    "regression": {
+      "status": "pass",
+      "finding": "Focused recursive-improvement/MCP tests and full go test ./... passed after blind-evaluation hardening."
+    },
+    "release_boundary": {
+      "status": "pass",
+      "finding": "No production switch, deployment, activation, or upstream runtime installation was performed."
+    }
+  },
+  "residual_risks": [
+    "The currently running NexusDock session exposes the pre-upgrade task_manage schema until this source revision is later built/released and the runtime is switched through the existing release process.",
+    "Identity neutrality of blind artifact bundle contents is a caller/staging responsibility; runtime enforces a separate blind_artifact_ref identity and withholds author-side refs, while content review remains part of the blind-evaluation procedure."
+  ]
+}

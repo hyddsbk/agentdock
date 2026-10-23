@@ -1,0 +1,51 @@
+{
+  "schema": "agentdock-extraction-validation/v1",
+  "subject": "google-research/harness2",
+  "plan_sha256": "58ed7c0e731566838f0d8294e2b3944d480fdd6af0e2924045e35ad4093119f4",
+  "artifact_sha256": "4d481a59548a2292372ade63e94b904bfa657cd7ef9e2336d3c29ff878be4913",
+  "artifact_file_count": 20,
+  "validations": {
+    "go_test_all": {
+      "status": "pass",
+      "receipt_ref": "exec://session-91a40662c5abf0eb038b3872"
+    },
+    "focused_recursive_improvement_tests": {
+      "status": "pass",
+      "receipt_ref": "exec://session-ef0165cbc779d6757fb745a6"
+    },
+    "git_diff_check": {
+      "status": "pass",
+      "receipt_ref": "exec://session-91a40662c5abf0eb038b3872"
+    },
+    "dependency_diff": {
+      "status": "empty",
+      "receipt_ref": "exec://session-6eb35501224cdfc15142395d"
+    },
+    "excluded_runtime_scan": {
+      "status": "empty",
+      "receipt_ref": "exec://session-6eb35501224cdfc15142395d"
+    },
+    "artifact_manifest": {
+      "status": "pass",
+      "file_count": 20,
+      "receipt_ref": "exec://session-d36bc025b1da445205cf6edd"
+    },
+    "skill_authoring_lint": {
+      "status": "pass",
+      "portable": true,
+      "error_count": 0,
+      "warning_count": 2,
+      "receipt_ref": "exec://session-d26368c20d796a7ef0bb4ccf"
+    },
+    "skill_package_validate": {
+      "status": "pass",
+      "digest": "sha256:4cabd59a3ad5353b1047b3d91bae16dfb2f482a1f774110b4d7003731a676032"
+    },
+    "adoption_plan_validation": {
+      "status": "pass",
+      "receipt_ref": "exec://session-3c1f6fa3a50c32cd5ee9d17a"
+    }
+  },
+  "production_switch": false,
+  "upstream_runtime_installed": false
+}

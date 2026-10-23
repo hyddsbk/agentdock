@@ -62,6 +62,8 @@ type ManageRequest struct {
 	TemplateID             string                            `json:"template_id,omitempty"`
 	SourceTemplateIDs      []string                          `json:"source_template_ids,omitempty"`
 	LearningChecks         []LearningCheckRequest            `json:"learning_checks,omitempty"`
+	ImprovementExperiment  *taskstate.ImprovementPlanInput   `json:"improvement_experiment,omitempty"`
+	ImprovementUpdate      *taskstate.ImprovementUpdate      `json:"improvement_update,omitempty"`
 	Status                 string                            `json:"status,omitempty"`
 	Limit                  *int                              `json:"limit,omitempty"`
 	TaskID                 string                            `json:"task_id,omitempty"`

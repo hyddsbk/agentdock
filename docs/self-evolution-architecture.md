@@ -149,6 +149,8 @@ type
 
 当前模型因此不需要主动搜索“AgentDock 以前学过什么”。
 
+对于需要改进 Skill / workflow / harness 本身、且存在多个可验证方案的 Task，可以附加 Task-owned `improvement_experiment`，用冻结 criteria 执行 Propose–Probe–Compose、parallel/sequential refinement 与 blind evaluation。它只是 Task 的可选子契约，不成为第二套 Evolution 或 memory。完整契约见 `docs/recursive-improvement.md`。
+
 ### 3.2 Task 生命周期保持独立
 
 模型照常执行真实任务：

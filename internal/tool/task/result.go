@@ -105,6 +105,23 @@ func compactTaskSummary(task taskstate.Task) map[string]any {
 		"condition_count": len(task.Conditions), "condition_refs": conditionRefs, "review_status": reviewStatus(task),
 		"updated_at": task.UpdatedAt,
 	}
+	if task.ImprovementExperiment != nil {
+		probed := 0
+		for _, candidate := range task.ImprovementExperiment.Candidates {
+			if candidate.Status == taskstate.ImprovementCandidateProbed {
+				probed++
+			}
+		}
+		summary["improvement_experiment"] = map[string]any{
+			"status":                 task.ImprovementExperiment.Status,
+			"target":                 truncateString(task.ImprovementExperiment.Target, 160),
+			"mode":                   task.ImprovementExperiment.Mode,
+			"candidate_count":        len(task.ImprovementExperiment.Candidates),
+			"probed_candidate_count": probed,
+			"surface_policy":         task.ImprovementExperiment.SurfacePolicy,
+			"evidence_isolation":     task.ImprovementExperiment.EvidenceIsolation,
+		}
+	}
 	if len(task.Unknowns) > 0 {
 		openUnknowns := compactOpenUnknowns(task)
 		summary["unknown_count"] = len(task.Unknowns)

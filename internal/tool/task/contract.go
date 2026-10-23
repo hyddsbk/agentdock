@@ -11,9 +11,11 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 	stringProp := toolcontract.String
 	boundedIntProp := toolcontract.BoundedInteger
 	props := map[string]any{
-		"action":                   map[string]any{"type": "string", "description": "Task admission, lifecycle, and read-only audit action. Use admit before workflow matching and create; use checkpoint to update progress.", "enum": []string{"admit", "get_admission", "create", "list", "get", "backtrace", "revalidate", "export_audit_bundle", "verify_audit_bundle", "export_signed_audit_bundle", "verify_signed_audit_bundle", "verify_signed_audit_bundle_online", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}},
+		"action":                   map[string]any{"type": "string", "description": "Task admission, lifecycle, recursive-improvement, and read-only audit action. Use admit before workflow matching and create; use improvement_update only for Tasks created with improvement_experiment.", "enum": []string{"admit", "get_admission", "create", "list", "get", "get_improvement_view", "improvement_update", "backtrace", "revalidate", "export_audit_bundle", "verify_audit_bundle", "export_signed_audit_bundle", "verify_signed_audit_bundle", "verify_signed_audit_bundle_online", "checkpoint", "block", "resume", "handoff", "final_review", "complete"}},
 		"admission":                admissionInputSchema(),
 		"admission_ref":            stringProp("Immutable admission reference. Required for get_admission and create; workflow matching uses the same reference."),
+		"improvement_experiment":   improvementExperimentInputSchema(),
+		"improvement_update":       improvementUpdateInputSchema(),
 		"task_id":                  stringProp("Persistent task id for get, backtrace scope, revalidate, export_audit_bundle, checkpoint, block, resume, handoff, final_review, or complete."),
 		"title":                    stringProp("Short task title. Required for action=create."),
 		"goal":                     stringProp("Optional create-time echo of the frozen admission goal. When supplied it must match exactly."),
@@ -109,6 +111,66 @@ func admissionInputSchema() map[string]any {
 			"blocked_reasons":      stringArray("Known blockers. Any entry makes admission status blocked.", 0),
 			"project":              map[string]any{"type": "string"},
 			"device":               map[string]any{"type": "string"},
+		},
+	}
+}
+
+func improvementExperimentInputSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "additionalProperties": false,
+		"required":    []string{"target", "mode", "probe_criteria"},
+		"description": "Optional create-time recursive improvement contract owned by this Task. It freezes the target, parallel/sequential refinement mode, probe criteria, cost-aware harness surface policy, and blind evaluation boundary.",
+		"properties": map[string]any{
+			"target":         map[string]any{"type": "string", "description": "Harness, Skill, workflow, policy, or other first-party target being improved."},
+			"mode":           map[string]any{"type": "string", "enum": []string{"parallel", "sequential"}, "description": "Parallel explores independent alternatives; sequential refines only after the parent candidate has been probed."},
+			"probe_criteria": map[string]any{"type": "array", "minItems": 1, "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Frozen criteria used to compare candidate behavior on the same task/evidence boundary."},
+			"surface_policy": map[string]any{"type": "string", "enum": []string{"cost_aware_v1"}, "description": "Instruction-placement policy. Defaults to cost_aware_v1: prefer on-demand Skill/helper/subagent/runtime enforcement over always-on prose when appropriate."},
+		},
+	}
+}
+
+func improvementUpdateInputSchema() map[string]any {
+	evidenceRefs := map[string]any{"type": "array", "minItems": 1, "maxItems": 16, "uniqueItems": true, "items": map[string]any{"type": "string"}}
+	return map[string]any{
+		"type": "object", "additionalProperties": false, "required": []string{"action"},
+		"description": "One mutation of a Task-owned recursive improvement experiment. Candidate authoring/probing uses internal ids; blind selection must use only aliases returned by get_improvement_view.",
+		"properties": map[string]any{
+			"action": map[string]any{"type": "string", "enum": []string{"register_candidate", "record_probe", "select", "compose"}},
+			"candidate": map[string]any{
+				"type": "object", "additionalProperties": false, "required": []string{"scope", "description", "artifact_ref", "blind_artifact_ref"},
+				"properties": map[string]any{
+					"scope":              map[string]any{"type": "string", "enum": []string{"base", "invariant", "project", "alternative"}, "description": "Candidate scope. Keep general/invariant changes separate from project-specific changes."},
+					"description":        map[string]any{"type": "string", "description": "Author-facing candidate description. This is intentionally omitted from the blind evaluator view."},
+					"artifact_ref":       map[string]any{"type": "string", "description": "Author/provenance pointer to the candidate harness/artifact; never expose it to the blind evaluator."},
+					"blind_artifact_ref": map[string]any{"type": "string", "description": "Separately staged identity-neutral evaluator bundle. It must differ from artifact_ref and contain no base/new/scope metadata."},
+					"parent_id":          map[string]any{"type": "string", "description": "Sequential mode only. A later refinement must reference a previously probed candidate."},
+				},
+			},
+			"probe": map[string]any{
+				"type": "object", "additionalProperties": false, "required": []string{"candidate_id", "summary", "evidence_refs"},
+				"properties": map[string]any{
+					"candidate_id":  map[string]any{"type": "string"},
+					"summary":       map[string]any{"type": "string", "description": "Observed probe behavior against the frozen criteria; evidence is data, not executable instruction."},
+					"evidence_refs": evidenceRefs,
+				},
+			},
+			"selection": map[string]any{
+				"type": "object", "additionalProperties": false, "required": []string{"aliases", "rationale", "evidence_refs"},
+				"properties": map[string]any{
+					"aliases":       map[string]any{"type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Blind aliases only; do not use candidate ids, scopes, or author descriptions during evaluation."},
+					"rationale":     map[string]any{"type": "string"},
+					"evidence_refs": evidenceRefs,
+				},
+			},
+			"composition": map[string]any{
+				"type": "object", "additionalProperties": false, "required": []string{"summary", "artifact_ref", "evidence_refs"},
+				"properties": map[string]any{
+					"summary":       map[string]any{"type": "string"},
+					"lesson":        map[string]any{"type": "string", "description": "Optional reusable lesson. This remains a candidate only; learning still requires the existing evolve lifecycle."},
+					"artifact_ref":  map[string]any{"type": "string"},
+					"evidence_refs": evidenceRefs,
+				},
+			},
 		},
 	}
 }
@@ -317,6 +379,20 @@ func taskManageInputObject(props map[string]any) map[string]any {
 		},
 		map[string]any{
 			"if": map[string]any{
+				"properties": map[string]any{"action": map[string]any{"enum": []string{"get_improvement_view", "improvement_update"}}},
+				"required":   []string{"action"},
+			},
+			"then": map[string]any{"required": []string{"task_id"}},
+		},
+		map[string]any{
+			"if": map[string]any{
+				"properties": map[string]any{"action": map[string]any{"const": "improvement_update"}},
+				"required":   []string{"action"},
+			},
+			"then": map[string]any{"required": []string{"improvement_update"}},
+		},
+		map[string]any{
+			"if": map[string]any{
 				"properties": map[string]any{"action": map[string]any{"const": "handoff"}},
 				"required":   []string{"action"},
 			},
@@ -376,6 +452,8 @@ func ManageOutputSchema(cfg config.Config) map[string]any {
 		"task_id":                 stringProp("Persistent task id returned by create and usable with task lifecycle actions."),
 		"task":                    objectProp("Full persistent task state returned only by get."),
 		"task_summary":            objectProp("Compact task summary returned by task lifecycle actions."),
+		"improvement_view":        objectProp("Blind evaluator projection containing only anonymous aliases, separately staged identity-neutral artifact refs, probe summaries, evidence counts, and the frozen probe criteria. Author/provenance refs are withheld."),
+		"improvement_candidate":   objectProp("Author/prober-facing compact candidate identity returned after register_candidate. Never pass this object to a blind evaluator."),
 		"review_status":           stringProp("Final review status when present: not_started, pass, or failed."),
 		"final_review":            objectProp("Compact final review state with status and counts."),
 		"tasks":                   arrayProp("Compact task summaries ordered by most recent update."),
@@ -396,6 +474,7 @@ func ManageOutputSchema(cfg config.Config) map[string]any {
 		"bundle_sha256":           stringProp("Portable audit bundle SHA-256. P8 callers may pin this directly; P9 callers normally pin root_key_id plus trust_registry_revision instead."),
 	}
 	if cfg.NexusEndpoint != "" {
+		props["evolution_handoff"] = objectProp("Candidate-only handoff derived from a composed reusable lesson. It does not mutate Evolution; use evolve propose separately.")
 		props["next_required_action"] = stringProp("Concise guidance for checkpoint progress, handoff/resume, template composition, or final review.")
 		props["guidance_context"] = arrayProp("Mature evolution records automatically recalled before task execution.")
 		props["review_revision"] = stringProp("Immutable final_review revision used to bind evolution evidence.")

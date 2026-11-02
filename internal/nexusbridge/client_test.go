@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -66,6 +67,24 @@ func TestReconnectBackoffResetsAfterEstablishedSession(t *testing.T) {
 	retryIn, next = reconnectBackoffAfterAttempt(32*time.Second, false)
 	if retryIn != 32*time.Second || next != 32*time.Second {
 		t.Fatalf("failed dial backoff = retry %s next %s, want 32s/32s", retryIn, next)
+	}
+}
+
+func TestBoundedToolResultMessageRejectsOversizedBridgePayload(t *testing.T) {
+	small := boundedToolResultMessage("small", map[string]any{"ok": true})
+	if small.Type != protocol.MessageToolResult || small.RequestID != "small" || small.Error != nil {
+		t.Fatalf("small result = %#v", small)
+	}
+
+	large := boundedToolResultMessage("large", map[string]any{"payload": strings.Repeat("x", maxMessageBytes)})
+	if large.Type != protocol.MessageToolError || large.RequestID != "large" || large.Error == nil {
+		t.Fatalf("large result = %#v", large)
+	}
+	if large.Error.Code != "NODE_RESULT_TOO_LARGE" || large.Error.Category != "resource" {
+		t.Fatalf("large error = %#v", large.Error)
+	}
+	if got, _ := large.Error.Details["limit"].(int); got != maxMessageBytes {
+		t.Fatalf("large error limit = %#v", large.Error.Details)
 	}
 }
 

@@ -262,12 +262,32 @@ func (c *Client) invoke(parent context.Context, socket *websocket.Conn, incoming
 		_ = c.write(socket, protocol.Message{Type: protocol.MessageToolError, RequestID: incoming.RequestID, Error: bridgeError(err)})
 		return
 	}
-	encoded, encodeErr := json.Marshal(result)
-	if encodeErr != nil {
-		_ = c.write(socket, protocol.Message{Type: protocol.MessageToolError, RequestID: incoming.RequestID, Error: bridgeError(fmt.Errorf("编码节点结果: %w", encodeErr))})
-		return
+	_ = c.write(socket, boundedToolResultMessage(incoming.RequestID, result))
+}
+
+func boundedToolResultMessage(requestID string, result map[string]any) protocol.Message {
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		return protocol.Message{Type: protocol.MessageToolError, RequestID: requestID, Error: bridgeError(fmt.Errorf("编码节点结果: %w", err))}
 	}
-	_ = c.write(socket, protocol.Message{Type: protocol.MessageToolResult, RequestID: incoming.RequestID, Result: encoded})
+	message := protocol.Message{Type: protocol.MessageToolResult, RequestID: requestID, Result: encoded}
+	wire, err := json.Marshal(message)
+	if err != nil {
+		return protocol.Message{Type: protocol.MessageToolError, RequestID: requestID, Error: bridgeError(fmt.Errorf("编码 NexusDock Bridge 结果: %w", err))}
+	}
+	if len(wire) > maxMessageBytes {
+		return protocol.Message{
+			Type:      protocol.MessageToolError,
+			RequestID: requestID,
+			Error: &protocol.RemoteError{
+				Code:     "NODE_RESULT_TOO_LARGE",
+				Message:  "AgentDock node result exceeds Nexus bridge message limit",
+				Category: "resource",
+				Details:  map[string]any{"bytes": len(wire), "limit": maxMessageBytes},
+			},
+		}
+	}
+	return message
 }
 
 func (c *Client) dispatchRuntimeRequest(ctx context.Context, request runtimeapi.Request) (map[string]any, error) {

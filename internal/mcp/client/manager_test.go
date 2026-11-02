@@ -453,6 +453,42 @@ func TestManagerStatePinBlocksDisableUntilOperationFinishes(t *testing.T) {
 	}
 }
 
+func TestManagerListDoesNotBlockOnBusyServerState(t *testing.T) {
+	manager, err := NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if _, err := manager.Add(ServerConfig{
+		Name:        "demo",
+		Description: "Demo",
+		Transport:   TransportStreamableHTTP,
+		URL:         "https://example.invalid/mcp",
+		Enabled:     true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	manager.mu.RLock()
+	state := manager.states["demo"]
+	manager.mu.RUnlock()
+	state.mu.Lock()
+	done := make(chan []ServerSummary, 1)
+	go func() { done <- manager.List() }()
+
+	select {
+	case listed := <-done:
+		if len(listed) != 1 || listed[0].Name != "demo" || listed[0].Status != "idle" {
+			state.mu.Unlock()
+			t.Fatalf("busy list = %#v", listed)
+		}
+	case <-time.After(250 * time.Millisecond):
+		state.mu.Unlock()
+		t.Fatal("List() blocked on an in-flight dynamic MCP server state")
+	}
+	state.mu.Unlock()
+}
+
 func TestManagerRejectsOperationsAfterClose(t *testing.T) {
 	manager, err := NewManager(t.TempDir())
 	if err != nil {

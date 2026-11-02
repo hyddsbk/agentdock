@@ -218,7 +218,7 @@ func (m *Manager) List() []ServerSummary {
 	sort.Strings(names)
 	items := make([]ServerSummary, 0, len(names))
 	for _, name := range names {
-		items = append(items, summaryFor(m.servers[name], m.states[name]))
+		items = append(items, summaryForNonBlocking(m.servers[name], m.states[name]))
 	}
 	m.mu.RUnlock()
 	return items
@@ -606,6 +606,28 @@ func summaryFor(cfg ServerConfig, state *serverState) ServerSummary {
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	return summaryForLocked(cfg, state)
+}
+
+// summaryForNonBlocking is used by capability/list surfaces that must stay
+// responsive even while a dynamic MCP server is executing a long upstream
+// request under state.mu. Returning a conservative idle snapshot is preferable
+// to blocking agentdock_context until the caller's deadline expires.
+func summaryForNonBlocking(cfg ServerConfig, state *serverState) ServerSummary {
+	if state.mu.TryLock() {
+		defer state.mu.Unlock()
+		return summaryForLocked(cfg, state)
+	}
+	status := "idle"
+	if !cfg.Enabled {
+		status = "disabled"
+	}
+	return ServerSummary{
+		Name:        cfg.Name,
+		Description: cfg.Description,
+		Transport:   cfg.Transport,
+		Enabled:     cfg.Enabled,
+		Status:      status,
+	}
 }
 
 func summaryForLocked(cfg ServerConfig, state *serverState) ServerSummary {

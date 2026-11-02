@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -370,5 +371,59 @@ func TestPermissionReissueDoesNotReplayPriorDecision(t *testing.T) {
 	}
 	if result := waitForSettledRun(t, restarted, secondRun.RunID); result.Status != RunCompleted {
 		t.Fatalf("second run = %s", result.Status)
+	}
+}
+
+func TestDurableApprovalPersistenceFailureLeavesPendingAndAllowsRetry(t *testing.T) {
+	manager := newPermissionTestManager(t, 5*time.Second)
+	resultCh := startPermissionRequest(t, manager, permissionParams(map[string]any{
+		"toolCallId": "tool-persist-retry",
+		"title":      "persist retry",
+		"kind":       "edit",
+	}))
+	interaction := waitForPendingInteraction(t, manager)
+
+	root := manager.store.root
+	backup := root + ".persist-retry-backup"
+	if err := os.Rename(root, backup); err != nil {
+		t.Fatal(err)
+	}
+	restored := false
+	defer func() {
+		if !restored {
+			_ = os.Remove(root)
+			_ = os.Rename(backup, root)
+		}
+	}()
+	if err := os.WriteFile(root, []byte("block-session-store"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := manager.RespondInteraction(interaction.ID, "allow-once", false); err == nil {
+		t.Fatal("expected durable approval persistence failure")
+	}
+	manager.mu.RLock()
+	gotStatus := manager.sessions["local-session"].Approvals[0].Status
+	manager.mu.RUnlock()
+	if gotStatus != ApprovalPending {
+		t.Fatalf("in-memory approval status after failed save = %s, want %s", gotStatus, ApprovalPending)
+	}
+
+	if err := os.Remove(root); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(backup, root); err != nil {
+		t.Fatal(err)
+	}
+	restored = true
+
+	if _, err := manager.RespondInteraction(interaction.ID, "allow-once", false); err != nil {
+		t.Fatalf("approval retry after storage recovery failed: %v", err)
+	}
+	select {
+	case result := <-resultCh:
+		assertPermissionOutcome(t, result.value, result.err, "selected", "allow-once")
+	case <-time.After(time.Second):
+		t.Fatal("permission request did not settle after retry")
 	}
 }

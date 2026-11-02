@@ -384,6 +384,7 @@ func (m *Manager) persistApprovalStatusLocked(interaction *Interaction, status A
 	if !exists {
 		return newError("ACP_SESSION_NOT_FOUND", "ACP session was not found while updating permission", false, map[string]any{"session_id": interaction.SessionID}, nil)
 	}
+	record.Approvals = append([]ApprovalEnvelope(nil), record.Approvals...)
 	index := -1
 	for i := range record.Approvals {
 		if record.Approvals[i].ApprovalID == interaction.ID {

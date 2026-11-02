@@ -102,7 +102,7 @@ func compactTaskSummary(task taskstate.Task) map[string]any {
 		"id": task.ID, "title": task.Title, "status": task.Status, "phase": task.Phase,
 		"completed_step_count": completedSteps, "step_count": len(task.Steps), "steps": steps,
 		"ready_step_count": len(readyFrontier), "ready_frontier": readyFrontier,
-		"condition_count": len(task.Conditions), "condition_refs": conditionRefs, "review_status": reviewStatus(task),
+		"condition_count": len(task.Conditions), "condition_refs": conditionRefs, "review_status": reviewStatus(task), "review_ready": reviewReady(task),
 		"updated_at": task.UpdatedAt,
 	}
 	if task.ImprovementExperiment != nil {
@@ -276,7 +276,7 @@ func compactTaskListItem(task taskstate.Task) map[string]any {
 	item := map[string]any{
 		"id": summary["id"], "title": summary["title"], "goal": task.Goal, "status": summary["status"], "phase": summary["phase"],
 		"completed_step_count": summary["completed_step_count"], "step_count": summary["step_count"],
-		"ready_step_count": summary["ready_step_count"], "review_status": summary["review_status"], "updated_at": summary["updated_at"],
+		"ready_step_count": summary["ready_step_count"], "review_status": summary["review_status"], "review_ready": summary["review_ready"], "updated_at": summary["updated_at"],
 	}
 	for _, key := range []string{"current_step", "summary", "blocker", "handoff", "requirement_refs", "requirement_ref_count"} {
 		if value, ok := summary[key]; ok {
@@ -291,6 +291,18 @@ func reviewStatus(task taskstate.Task) string {
 		return "not_started"
 	}
 	return task.FinalReview.Status
+}
+
+func reviewReady(task taskstate.Task) bool {
+	if task.Status != taskstate.StatusActive || task.FinalReview != nil {
+		return false
+	}
+	for _, step := range task.Steps {
+		if step.Status != taskstate.StepCompleted {
+			return false
+		}
+	}
+	return true
 }
 
 func compactOpenUnknowns(task taskstate.Task) []map[string]any {

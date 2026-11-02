@@ -3,9 +3,12 @@ package taskstate
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 )
+
+var errNoStateMutation = errors.New("task state unchanged")
 
 func (s *Store) Checkpoint(id, stepID, status, summary string, diagnostics ...*DiagnosticEvidence) (Task, error) {
 	if len(diagnostics) > 1 {
@@ -109,6 +112,8 @@ func (s *Store) CheckpointWithEvidenceTDDAndSemantics(
 			}
 			step.Diagnostic = normalized
 		}
+		var normalizedExecutionEvidence *ExecutionEvidence
+		sameExecutionEvidence := false
 		if executionEvidence != nil {
 			if status == StepPending {
 				return errors.New("execution evidence can only be recorded on an in_progress or completed checkpoint")
@@ -117,10 +122,14 @@ func (s *Store) CheckpointWithEvidenceTDDAndSemantics(
 			if err != nil {
 				return err
 			}
-			step.ExecutionEvidence = normalized
+			normalizedExecutionEvidence = normalized
+			sameExecutionEvidence = reflect.DeepEqual(step.ExecutionEvidence, normalized)
 		}
-		if step.Status == status && task.Summary == summary && diagnostic == nil && executionEvidence == nil && tddEvidence == nil && len(evidenceRecords) == 0 && len(unknownUpdates) == 0 {
-			return nil
+		if step.Status == status && task.Summary == summary && diagnostic == nil && tddEvidence == nil && len(evidenceRecords) == 0 && len(unknownUpdates) == 0 && (executionEvidence == nil || sameExecutionEvidence) {
+			return errNoStateMutation
+		}
+		if normalizedExecutionEvidence != nil {
+			step.ExecutionEvidence = normalizedExecutionEvidence
 		}
 		if !validStepTransition(step.Status, status) {
 			return fmt.Errorf("cannot move step %s from %s to %s", step.ID, step.Status, status)
@@ -494,6 +503,9 @@ func (s *Store) mutate(id string, fn func(*Task, time.Time) error) (Task, error)
 	}
 	now := time.Now().UTC()
 	if err := fn(&task, now); err != nil {
+		if errors.Is(err, errNoStateMutation) {
+			return task, nil
+		}
 		return Task{}, err
 	}
 	task.UpdatedAt = now

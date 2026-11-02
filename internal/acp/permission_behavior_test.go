@@ -9,7 +9,7 @@ import (
 )
 
 func TestPermissionExplicitRejectOptionIsReturned(t *testing.T) {
-	manager := newPermissionTestManager(time.Second)
+	manager := newPermissionTestManager(t, time.Second)
 	resultCh := startPermissionRequest(t, manager, permissionParams(map[string]any{"title": "write"}))
 	interaction := waitForPendingInteraction(t, manager)
 	settled, err := manager.RespondInteraction(interaction.ID, "reject-once", false)
@@ -24,7 +24,7 @@ func TestPermissionExplicitRejectOptionIsReturned(t *testing.T) {
 }
 
 func TestPermissionExplicitCancellationIsReturned(t *testing.T) {
-	manager := newPermissionTestManager(time.Second)
+	manager := newPermissionTestManager(t, time.Second)
 	resultCh := startPermissionRequest(t, manager, permissionParams(map[string]any{"title": "write"}))
 	interaction := waitForPendingInteraction(t, manager)
 	settled, err := manager.RespondInteraction(interaction.ID, "", true)
@@ -39,7 +39,7 @@ func TestPermissionExplicitCancellationIsReturned(t *testing.T) {
 }
 
 func TestPermissionTimeoutExpiresInteraction(t *testing.T) {
-	manager := newPermissionTestManager(25 * time.Millisecond)
+	manager := newPermissionTestManager(t, 25*time.Millisecond)
 	resultCh := startPermissionRequest(t, manager, permissionParams(map[string]any{"title": "wait"}))
 	interaction := waitForAnyInteraction(t, manager)
 	result := <-resultCh
@@ -54,7 +54,7 @@ func TestPermissionTimeoutExpiresInteraction(t *testing.T) {
 }
 
 func TestPermissionManagerCloseExpiresInteraction(t *testing.T) {
-	manager := newPermissionTestManager(time.Second)
+	manager := newPermissionTestManager(t, time.Second)
 	resultCh := startPermissionRequest(t, manager, permissionParams(map[string]any{"title": "wait"}))
 	interaction := waitForPendingInteraction(t, manager)
 	close(manager.closedCh)
@@ -70,7 +70,7 @@ func TestPermissionManagerCloseExpiresInteraction(t *testing.T) {
 }
 
 func TestPermissionOversizedToolCallIsCancelledWithoutRetention(t *testing.T) {
-	manager := newPermissionTestManager(time.Second)
+	manager := newPermissionTestManager(t, time.Second)
 	value, err := manager.handlePermission(context.Background(), permissionParams(map[string]any{
 		"title": "oversized", "payload": strings.Repeat("x", maxPermissionToolCallBytes+1),
 	}))
@@ -81,7 +81,7 @@ func TestPermissionOversizedToolCallIsCancelledWithoutRetention(t *testing.T) {
 }
 
 func TestPermissionPendingLimitCancelsNewRequest(t *testing.T) {
-	manager := newPermissionTestManager(time.Second)
+	manager := newPermissionTestManager(t, time.Second)
 	now := time.Now().UTC()
 	for index := 0; index < maxPendingInteractionsPerSession; index++ {
 		id := "existing-" + string(rune('a'+index))
@@ -102,9 +102,30 @@ type permissionResult struct {
 	err   error
 }
 
-func newPermissionTestManager(timeout time.Duration) *Manager {
+func newPermissionTestManager(t *testing.T, timeout time.Duration) *Manager {
+	t.Helper()
+	store, err := newSessionStore(t.TempDir(), "helper")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	record := SessionRecord{
+		SchemaVersion:   sessionSchemaVersion,
+		ID:              "local-session",
+		Agent:           "helper",
+		RemoteSessionID: "remote-session",
+		CWD:             t.TempDir(),
+		Status:          SessionReady,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+	if err := store.Save(record); err != nil {
+		t.Fatal(err)
+	}
 	return &Manager{
-		opts:          Options{InteractionTimeout: timeout},
+		opts:          Options{InteractionTimeout: timeout, Agent: AgentSpec{Name: "helper"}},
+		store:         store,
+		sessions:      map[string]SessionRecord{record.ID: record},
 		remoteToLocal: map[string]string{"remote-session": "local-session"},
 		interactions:  make(map[string]*Interaction), runs: make(map[string]*Run),
 		activeRunBySession: make(map[string]string), closedCh: make(chan struct{}),

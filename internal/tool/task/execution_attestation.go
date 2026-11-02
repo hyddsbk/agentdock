@@ -10,7 +10,7 @@ import (
 )
 
 func (s *Service) checkpointWithReceiptEvidence(
-	taskID, stepID, status, summary string,
+	taskID, stepID, status, summary, idempotencyKey string,
 	tddRequest *TDDSeamRequest,
 	executionReceipts []ExecutionReceiptRequest,
 	diagnostic *taskstate.DiagnosticEvidence,
@@ -18,6 +18,18 @@ func (s *Service) checkpointWithReceiptEvidence(
 	evidenceRecords []taskstate.EvidenceRecordInput,
 	unknownUpdates []taskstate.UnknownUpdate,
 ) (taskstate.Task, error) {
+	if idempotencyKey != "" {
+		if tddRequest != nil || len(executionReceipts) > 0 || legacyEvidence != nil || len(unknownUpdates) > 0 {
+			return taskstate.Task{}, errors.New("idempotency_key cannot be combined with tdd_seam, execution evidence/receipts, or unknown_updates")
+		}
+		if diagnostic == nil && len(evidenceRecords) == 0 {
+			return taskstate.Task{}, errors.New("idempotency_key requires diagnostic or evidence_records")
+		}
+		return s.tasks.CheckpointWithEvidenceTDDAndSemanticsIdempotent(
+			taskID, stepID, status, summary,
+			diagnostic, nil, nil, evidenceRecords, nil, idempotencyKey,
+		)
+	}
 	if tddRequest != nil && len(executionReceipts) > 0 {
 		return taskstate.Task{}, errors.New("tdd_seam and execution_receipts cannot be combined")
 	}

@@ -92,7 +92,7 @@ func TestTaskManageEvidenceSemanticsRoundTripAndReviewGate(t *testing.T) {
 func TestTaskManageSchemaPublishesEvidenceSemantics(t *testing.T) {
 	schema := ManageInputSchema(config.Config{})
 	props := schema["properties"].(map[string]any)
-	for _, field := range []string{"evidence_records", "unknown_updates", "acknowledged_unknown_ids"} {
+	for _, field := range []string{"idempotency_key", "evidence_records", "unknown_updates", "acknowledged_unknown_ids"} {
 		if _, ok := props[field]; !ok {
 			t.Fatalf("task_manage schema missing %s", field)
 		}

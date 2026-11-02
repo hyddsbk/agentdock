@@ -1,6 +1,8 @@
 package taskstate
 
 import (
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -9,6 +11,11 @@ import (
 )
 
 var errNoStateMutation = errors.New("task state unchanged")
+
+const (
+	maxCheckpointReplayBindingsPerStep = 64
+	maxCheckpointIdempotencyKeyBytes   = 256
+)
 
 func (s *Store) Checkpoint(id, stepID, status, summary string, diagnostics ...*DiagnosticEvidence) (Task, error) {
 	if len(diagnostics) > 1 {
@@ -41,6 +48,21 @@ func (s *Store) CheckpointWithEvidenceTDDAndSemantics(
 	evidenceRecords []EvidenceRecordInput,
 	unknownUpdates []UnknownUpdate,
 ) (Task, error) {
+	return s.CheckpointWithEvidenceTDDAndSemanticsIdempotent(
+		id, stepID, status, summary,
+		diagnostic, executionEvidence, tddEvidence, evidenceRecords, unknownUpdates, "",
+	)
+}
+
+func (s *Store) CheckpointWithEvidenceTDDAndSemanticsIdempotent(
+	id, stepID, status, summary string,
+	diagnostic *DiagnosticEvidence,
+	executionEvidence *ExecutionEvidence,
+	tddEvidence *TDDSeam,
+	evidenceRecords []EvidenceRecordInput,
+	unknownUpdates []UnknownUpdate,
+	idempotencyKey string,
+) (Task, error) {
 	return s.mutate(id, func(task *Task, now time.Time) error {
 		if err := requireActive(task); err != nil {
 			return err
@@ -72,6 +94,18 @@ func (s *Store) CheckpointWithEvidenceTDDAndSemantics(
 			return fmt.Errorf("task step %s not found", stepID)
 		}
 		step := &task.Steps[stepIndex]
+		idempotencyKey = strings.TrimSpace(idempotencyKey)
+		if idempotencyKey != "" {
+			if err := validateCheckpointIdempotencyKey(idempotencyKey); err != nil {
+				return err
+			}
+			if diagnostic == nil && len(evidenceRecords) == 0 {
+				return errors.New("idempotency_key requires diagnostic or evidence_records")
+			}
+			if tddEvidence != nil || executionEvidence != nil || len(unknownUpdates) > 0 {
+				return errors.New("idempotency_key cannot be combined with tdd, execution, or unknown-update evidence")
+			}
+		}
 		if (len(evidenceRecords) > 0 || len(unknownUpdates) > 0) && status == StepPending {
 			return errors.New("evidence_records and unknown_updates require an in_progress or completed checkpoint")
 		}
@@ -98,6 +132,7 @@ func (s *Store) CheckpointWithEvidenceTDDAndSemantics(
 		if status == StepCompleted && step.ExecutionContract != nil && executionEvidence == nil && step.ExecutionEvidence == nil {
 			return errors.New("declared execution contract requires executor evidence to complete")
 		}
+		var normalizedDiagnostic *DiagnosticEvidence
 		if diagnostic != nil {
 			if status == StepPending {
 				return errors.New("diagnostic evidence can only be recorded on an in_progress or completed checkpoint")
@@ -110,7 +145,33 @@ func (s *Store) CheckpointWithEvidenceTDDAndSemantics(
 			if err != nil {
 				return err
 			}
-			step.Diagnostic = normalized
+			normalizedDiagnostic = normalized
+		}
+		normalizedEvidenceRecords, err := normalizeEvidenceRecordInputs(evidenceRecords)
+		if err != nil {
+			return err
+		}
+		var replayDigest string
+		if idempotencyKey != "" {
+			replayDigest, err = checkpointReplayPayloadDigest(step.ID, status, summary, normalizedDiagnostic, normalizedEvidenceRecords)
+			if err != nil {
+				return err
+			}
+			for _, binding := range step.CheckpointReplays {
+				if binding.IdempotencyKey != idempotencyKey {
+					continue
+				}
+				if binding.PayloadSHA256 != replayDigest {
+					return fmt.Errorf("checkpoint idempotency conflict for key %q", idempotencyKey)
+				}
+				return errNoStateMutation
+			}
+			if len(step.CheckpointReplays) >= maxCheckpointReplayBindingsPerStep {
+				return fmt.Errorf("step %s checkpoint replay bindings cannot exceed %d", step.ID, maxCheckpointReplayBindingsPerStep)
+			}
+		}
+		if normalizedDiagnostic != nil {
+			step.Diagnostic = normalizedDiagnostic
 		}
 		var normalizedExecutionEvidence *ExecutionEvidence
 		sameExecutionEvidence := false
@@ -148,7 +209,7 @@ func (s *Store) CheckpointWithEvidenceTDDAndSemantics(
 		if status == StepCompleted && tddEvidence != nil {
 			step.TDD = tddEvidence
 		}
-		if err := applyEvidenceSemantics(task, step, evidenceRecords, unknownUpdates, now); err != nil {
+		if err := applyEvidenceSemantics(task, step, normalizedEvidenceRecords, unknownUpdates, now); err != nil {
 			return err
 		}
 		if status == StepCompleted {
@@ -172,9 +233,46 @@ func (s *Store) CheckpointWithEvidenceTDDAndSemantics(
 		}
 		task.Phase = step.Phase
 		task.Summary = summary
+		if idempotencyKey != "" {
+			step.CheckpointReplays = append(step.CheckpointReplays, CheckpointReplayBinding{
+				IdempotencyKey: idempotencyKey,
+				PayloadSHA256:  replayDigest,
+				RecordedAt:     now,
+			})
+		}
 		appendTaskEvent(task, Event{Type: "checkpoint", Summary: step.ID + "=" + status + ": " + summary, CreatedAt: now})
 		return nil
 	})
+}
+
+func validateCheckpointIdempotencyKey(value string) error {
+	if value == "" || strings.ContainsAny(value, "\r\n") || len([]byte(value)) > maxCheckpointIdempotencyKeyBytes {
+		return fmt.Errorf("idempotency_key must be a single-line value no larger than %d bytes", maxCheckpointIdempotencyKeyBytes)
+	}
+	return nil
+}
+
+func checkpointReplayPayloadDigest(
+	stepID, status, summary string,
+	diagnostic *DiagnosticEvidence,
+	evidenceRecords []EvidenceRecordInput,
+) (string, error) {
+	payload := struct {
+		StepID          string                `json:"step_id"`
+		Status          string                `json:"status"`
+		Summary         string                `json:"summary"`
+		Diagnostic      *DiagnosticEvidence   `json:"diagnostic,omitempty"`
+		EvidenceRecords []EvidenceRecordInput `json:"evidence_records,omitempty"`
+	}{
+		StepID: stepID, Status: status, Summary: summary,
+		Diagnostic: diagnostic, EvidenceRecords: evidenceRecords,
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("encode checkpoint replay payload: %w", err)
+	}
+	sum := sha256.Sum256(encoded)
+	return fmt.Sprintf("%x", sum[:]), nil
 }
 
 func (s *Store) BatchCheckpoint(id string, completedStepIDs []string, currentStepID, summary string) (Task, error) {

@@ -10,10 +10,16 @@ func TestCurrentPoliciesMatchRuntimeBoundsAndJSONContract(t *testing.T) {
 	if policies.Events.MaxRetainedEvents != maxEventCount ||
 		policies.Events.MaxRetainedBytes != maxEventBytes ||
 		policies.Events.MaxUpdateBytes != maxEventUpdateBytes ||
-		policies.Events.MaxEventsPerPage != 200 {
+		policies.Events.MaxEventsPerPage != 200 ||
+		!policies.Events.AuditJournal ||
+		policies.Events.PersistedPayloads ||
+		policies.Events.PersistentMaxRuns != maxPersistedAuditRuns ||
+		policies.Events.PersistentMaxEventsPerRun != maxAuditEventsPerRun ||
+		policies.Events.PersistentMaxBytesPerRun != maxAuditBytesPerRun {
 		t.Fatalf("event policy = %#v", policies.Events)
 	}
-	if policies.Interactions.MaxOptions != maxPermissionOptions ||
+	if !policies.Interactions.MemoryOnly || !policies.Interactions.DurableApprovalState ||
+		policies.Interactions.MaxOptions != maxPermissionOptions ||
 		policies.Interactions.MaxToolCallBytes != maxPermissionToolCallBytes ||
 		policies.Interactions.MaxPendingGlobal != maxPendingInteractions ||
 		policies.Interactions.MaxPendingPerSession != maxPendingInteractionsPerSession {

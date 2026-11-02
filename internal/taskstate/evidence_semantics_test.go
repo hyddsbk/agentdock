@@ -204,8 +204,8 @@ func TestTaskSchema10MigratesThroughAdmissionSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if task.SchemaVersion != SchemaVersion || SchemaVersion != 13 {
-		t.Fatalf("schema version = %d want 13", task.SchemaVersion)
+	if task.SchemaVersion != SchemaVersion || SchemaVersion != 14 {
+		t.Fatalf("schema version = %d want 14", task.SchemaVersion)
 	}
 }
 

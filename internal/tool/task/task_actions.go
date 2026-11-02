@@ -35,6 +35,7 @@ type taskManageInput struct {
 	Limit                  int
 	TaskID                 string
 	StepID                 string
+	IdempotencyKey         string
 	TDDSeam                *TDDSeamRequest
 	ExecutionReceipts      []ExecutionReceiptRequest
 	CompletedStepIDs       []string
@@ -129,6 +130,7 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 		Limit:                  intValue(request.Limit, 50),
 		TaskID:                 request.TaskID,
 		StepID:                 request.StepID,
+		IdempotencyKey:         strings.TrimSpace(request.IdempotencyKey),
 		TDDSeam:                request.TDDSeam,
 		ExecutionReceipts:      append([]ExecutionReceiptRequest(nil), request.ExecutionReceipts...),
 		CurrentStepID:          request.CurrentStepID,
@@ -182,6 +184,9 @@ func normalizeTaskManageRequest(request ManageRequest) (taskManageInput, error) 
 	}
 	if input.Diagnostic != nil && input.Action != "checkpoint" {
 		return input, toolErrorDetails("VALIDATION_ERROR", "diagnostic evidence is only valid for checkpoint", "validation", map[string]any{"field": "diagnostic", "action": input.Action})
+	}
+	if input.IdempotencyKey != "" && input.Action != "checkpoint" {
+		return input, toolErrorDetails("VALIDATION_ERROR", "idempotency_key is only valid for checkpoint", "validation", map[string]any{"field": "idempotency_key", "action": input.Action})
 	}
 	if input.ExecutionEvidence != nil && input.Action != "checkpoint" {
 		return input, toolErrorDetails("VALIDATION_ERROR", "execution_evidence is only valid for checkpoint", "validation", map[string]any{"field": "execution_evidence", "action": input.Action})
@@ -589,6 +594,9 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 			})
 		}
 		if batchMode {
+			if input.IdempotencyKey != "" {
+				return nil, toolErrorDetails("VALIDATION_ERROR", "idempotency_key is only accepted by single-step checkpoint", "validation", map[string]any{"field": "idempotency_key"})
+			}
 			if input.TDDSeam != nil {
 				return nil, toolErrorDetails("VALIDATION_ERROR", "tdd_seam is only accepted by single-step checkpoint", "validation", map[string]any{"field": "tdd_seam"})
 			}
@@ -609,7 +617,7 @@ func (s *Service) Manage(ctx context.Context, request ManageRequest) (Result, er
 			}
 			task, err = s.tasks.BatchCheckpoint(input.TaskID, input.CompletedStepIDs, input.CurrentStepID, input.Summary)
 		} else {
-			task, err = s.checkpointWithReceiptEvidence(input.TaskID, input.StepID, input.Status, input.Summary, input.TDDSeam, input.ExecutionReceipts, input.Diagnostic, input.ExecutionEvidence, input.EvidenceRecords, input.UnknownUpdates)
+			task, err = s.checkpointWithReceiptEvidence(input.TaskID, input.StepID, input.Status, input.Summary, input.IdempotencyKey, input.TDDSeam, input.ExecutionReceipts, input.Diagnostic, input.ExecutionEvidence, input.EvidenceRecords, input.UnknownUpdates)
 		}
 	case "block":
 		task, err = s.tasks.Block(input.TaskID, input.Summary)

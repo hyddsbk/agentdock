@@ -107,20 +107,27 @@ type DiagnosticEvidence struct {
 	EvidenceRefs []string `json:"evidence_refs,omitempty"`
 }
 
+type CheckpointReplayBinding struct {
+	IdempotencyKey string    `json:"idempotency_key"`
+	PayloadSHA256  string    `json:"payload_sha256"`
+	RecordedAt     time.Time `json:"recorded_at"`
+}
+
 type TaskStep struct {
-	TDD                  *TDDSeam            `json:"tdd_seam,omitempty"`
-	ExecutionContract    *ExecutionContract  `json:"execution_contract,omitempty"`
-	ID                   string              `json:"id"`
-	Title                string              `json:"title"`
-	Phase                Phase               `json:"phase"`
-	DependsOn            []string            `json:"depends_on,omitempty"`
-	CompletionConditions []string            `json:"completion_conditions,omitempty"`
-	ContextRefs          []string            `json:"context_refs,omitempty"`
-	RequirementRefs      []string            `json:"requirement_refs,omitempty"`
-	Quality              *StepQuality        `json:"quality,omitempty"`
-	Diagnostic           *DiagnosticEvidence `json:"diagnostic,omitempty"`
-	ExecutionEvidence    *ExecutionEvidence  `json:"execution_evidence,omitempty"`
-	EvidenceRecords      []EvidenceRecord    `json:"evidence_records,omitempty"`
-	Status               string              `json:"status"`
-	UpdatedAt            time.Time           `json:"updated_at"`
+	TDD                  *TDDSeam                  `json:"tdd_seam,omitempty"`
+	ExecutionContract    *ExecutionContract        `json:"execution_contract,omitempty"`
+	ID                   string                    `json:"id"`
+	Title                string                    `json:"title"`
+	Phase                Phase                     `json:"phase"`
+	DependsOn            []string                  `json:"depends_on,omitempty"`
+	CompletionConditions []string                  `json:"completion_conditions,omitempty"`
+	ContextRefs          []string                  `json:"context_refs,omitempty"`
+	RequirementRefs      []string                  `json:"requirement_refs,omitempty"`
+	Quality              *StepQuality              `json:"quality,omitempty"`
+	Diagnostic           *DiagnosticEvidence       `json:"diagnostic,omitempty"`
+	ExecutionEvidence    *ExecutionEvidence        `json:"execution_evidence,omitempty"`
+	EvidenceRecords      []EvidenceRecord          `json:"evidence_records,omitempty"`
+	CheckpointReplays    []CheckpointReplayBinding `json:"checkpoint_replays,omitempty"`
+	Status               string                    `json:"status"`
+	UpdatedAt            time.Time                 `json:"updated_at"`
 }

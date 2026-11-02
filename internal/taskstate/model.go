@@ -6,21 +6,22 @@ import (
 )
 
 const (
-	SchemaVersion              = 13
-	legacySchemaVersion        = 1
-	dependencySchemaVersion    = 2
-	contextSchemaVersion       = 3
-	qualitySchemaVersion       = 4
-	diagnosticSchemaVersion    = 5
-	handoffSchemaVersion       = 6
-	traceabilitySchemaVersion  = 7
-	tddSchemaVersion           = 8
-	executionSchemaVersion     = 9
-	outcomeSchemaVersion       = 10
-	evidenceSchemaVersion      = 11
-	admissionTaskSchemaVersion = 12
-	FinalReviewPass            = "pass"
-	FinalReviewFailed          = "failed"
+	SchemaVersion                 = 14
+	legacySchemaVersion           = 1
+	dependencySchemaVersion       = 2
+	contextSchemaVersion          = 3
+	qualitySchemaVersion          = 4
+	diagnosticSchemaVersion       = 5
+	handoffSchemaVersion          = 6
+	traceabilitySchemaVersion     = 7
+	tddSchemaVersion              = 8
+	executionSchemaVersion        = 9
+	outcomeSchemaVersion          = 10
+	evidenceSchemaVersion         = 11
+	admissionTaskSchemaVersion    = 12
+	checkpointReplaySchemaVersion = 13
+	FinalReviewPass               = "pass"
+	FinalReviewFailed             = "failed"
 
 	maxTaskTitleBytes        = 512
 	maxTaskGoalBytes         = 16 << 10

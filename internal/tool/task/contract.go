@@ -22,6 +22,7 @@ func ManageInputSchema(cfg config.Config) map[string]any {
 		"completion_conditions":    map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string"}, "description": "Optional create-time echo of frozen admission success_conditions. When supplied it must match exactly."},
 		"requirement_refs":         map[string]any{"type": "array", "maxItems": 32, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Optional authoritative requirement/spec pointers for traceable work. Every ref must be mapped by at least one step; do not copy spec prose here."},
 		"step_id":                  stringProp("Task step id for a single-step checkpoint."),
+		"idempotency_key":          stringProp("Optional logical replay identity for a single-step diagnostic/evidence checkpoint. Same key plus the same normalized payload is a no-op; same key plus different payload fails closed."),
 		"tdd_seam":                 tddSeamInputSchema(),
 		"completed_step_ids":       map[string]any{"type": "array", "minItems": 1, "maxItems": 12, "uniqueItems": true, "items": map[string]any{"type": "string"}, "description": "Task step ids to mark completed in one atomic batch checkpoint."},
 		"current_step_id":          stringProp("Single task step id to mark in_progress in a batch checkpoint."),

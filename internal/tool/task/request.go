@@ -68,6 +68,7 @@ type ManageRequest struct {
 	Limit                  *int                              `json:"limit,omitempty"`
 	TaskID                 string                            `json:"task_id,omitempty"`
 	StepID                 string                            `json:"step_id,omitempty"`
+	IdempotencyKey         string                            `json:"idempotency_key,omitempty"`
 	TDDSeam                *TDDSeamRequest                   `json:"tdd_seam,omitempty"`
 	CompletedStepIDs       *[]string                         `json:"completed_step_ids,omitempty"`
 	CurrentStepID          string                            `json:"current_step_id,omitempty"`

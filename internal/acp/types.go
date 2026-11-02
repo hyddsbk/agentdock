@@ -1,6 +1,7 @@
 package acp
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -93,18 +94,19 @@ const (
 )
 
 type SessionRecord struct {
-	SchemaVersion         int           `json:"schema_version"`
-	ID                    string        `json:"id"`
-	Agent                 string        `json:"agent"`
-	RemoteSessionID       string        `json:"remote_session_id"`
-	CWD                   string        `json:"cwd"`
-	AdditionalDirectories []string      `json:"additional_directories,omitempty"`
-	ModeID                string        `json:"mode_id,omitempty"`
-	Status                SessionStatus `json:"status"`
-	LastStopReason        string        `json:"last_stop_reason,omitempty"`
-	CreatedAt             time.Time     `json:"created_at"`
-	UpdatedAt             time.Time     `json:"updated_at"`
-	ClosedAt              *time.Time    `json:"closed_at,omitempty"`
+	SchemaVersion         int                `json:"schema_version"`
+	ID                    string             `json:"id"`
+	Agent                 string             `json:"agent"`
+	RemoteSessionID       string             `json:"remote_session_id"`
+	CWD                   string             `json:"cwd"`
+	AdditionalDirectories []string           `json:"additional_directories,omitempty"`
+	ModeID                string             `json:"mode_id,omitempty"`
+	Status                SessionStatus      `json:"status"`
+	LastStopReason        string             `json:"last_stop_reason,omitempty"`
+	Approvals             []ApprovalEnvelope `json:"approvals,omitempty"`
+	CreatedAt             time.Time          `json:"created_at"`
+	UpdatedAt             time.Time          `json:"updated_at"`
+	ClosedAt              *time.Time         `json:"closed_at,omitempty"`
 }
 
 type RunStatus string
@@ -122,13 +124,19 @@ type Event struct {
 	Type                string          `json:"type"`
 	SessionID           string          `json:"session_id"`
 	RunID               string          `json:"run_id,omitempty"`
+	ToolCallID          string          `json:"tool_call_id,omitempty"`
+	MessageID           string          `json:"message_id,omitempty"`
 	CreatedAt           time.Time       `json:"created_at"`
 	Update              json.RawMessage `json:"update,omitempty"`
+	UpdateSHA256        string          `json:"update_sha256,omitempty"`
+	UpdateOmitted       bool            `json:"update_omitted,omitempty"`
 	UpdateTruncated     bool            `json:"update_truncated,omitempty"`
 	OriginalUpdateBytes int             `json:"original_update_bytes,omitempty"`
 	StopReason          string          `json:"stop_reason,omitempty"`
 	ErrorCode           string          `json:"error_code,omitempty"`
 	Message             string          `json:"message,omitempty"`
+	MessageSHA256       string          `json:"message_sha256,omitempty"`
+	MessageOmitted      bool            `json:"message_omitted,omitempty"`
 }
 
 type eventPage struct {
@@ -160,6 +168,7 @@ type Run struct {
 	lastAssistantChunk    string
 	finalized             chan struct{}
 	finalizeOnce          sync.Once
+	persistEvent          func(Event) error
 }
 
 func newRun(id, sessionID string) *Run {
@@ -170,15 +179,18 @@ func newRun(id, sessionID string) *Run {
 	}
 }
 
-func (r *Run) appendSessionUpdate(event Event) {
+func (r *Run) appendSessionUpdate(event Event) error {
 	if r == nil {
-		return
+		return nil
 	}
 	r.eventsMu.Lock()
 	r.noteCodexUpdateLocked(event.Type, event.Update)
-	r.appendEventLocked(event)
+	err := r.appendEventLocked(event)
 	r.eventsMu.Unlock()
-	r.signalEvent()
+	if err == nil {
+		r.signalEvent()
+	}
+	return err
 }
 
 func (r *Run) noteCodexUpdateLocked(eventType string, update json.RawMessage) {
@@ -251,25 +263,41 @@ func assistantChunkText(update json.RawMessage) string {
 	return ""
 }
 
-func (r *Run) appendEvent(event Event) {
+func (r *Run) appendEvent(event Event) error {
 	if r == nil {
-		return
+		return nil
 	}
 	r.eventsMu.Lock()
-	r.appendEventLocked(event)
+	err := r.appendEventLocked(event)
 	r.eventsMu.Unlock()
-	r.signalEvent()
+	if err == nil {
+		r.signalEvent()
+	}
+	return err
 }
 
-func (r *Run) appendEventLocked(event Event) {
+func (r *Run) appendEventLocked(event Event) error {
 	event.Seq = r.nextSeq
-	r.nextSeq++
 	event.SessionID = r.SessionID
 	event.RunID = r.ID
 	if event.CreatedAt.IsZero() {
 		event.CreatedAt = time.Now().UTC()
 	}
+	if len(event.Update) > 0 {
+		sum := sha256.Sum256(event.Update)
+		event.UpdateSHA256 = fmt.Sprintf("%x", sum[:])
+	}
+	if event.Message != "" {
+		sum := sha256.Sum256([]byte(event.Message))
+		event.MessageSHA256 = fmt.Sprintf("%x", sum[:])
+	}
 	event.Update, event.UpdateTruncated, event.OriginalUpdateBytes = boundedEventUpdate(event.Update)
+	if r.persistEvent != nil {
+		if err := r.persistEvent(event); err != nil {
+			return err
+		}
+	}
+	r.nextSeq++
 	size := eventSize(event)
 	r.events = append(r.events, event)
 	r.eventBytes += size
@@ -278,6 +306,7 @@ func (r *Run) appendEventLocked(event Event) {
 		r.eventBytes -= eventSize(removed)
 		r.events = r.events[1:]
 	}
+	return nil
 }
 
 func (r *Run) signalEvent() {
@@ -335,7 +364,8 @@ func (r *Run) eventsAfterLocked(after uint64, limit int) (eventPage, error) {
 }
 
 func eventSize(event Event) int {
-	return len(event.Update) + len(event.Message) + len(event.StopReason) + 160
+	return len(event.Update) + len(event.Message) + len(event.StopReason) +
+		len(event.ToolCallID) + len(event.MessageID) + len(event.UpdateSHA256) + len(event.MessageSHA256) + 192
 }
 
 func boundedEventUpdate(update json.RawMessage) (json.RawMessage, bool, int) {
@@ -386,6 +416,30 @@ type PermissionOption struct {
 	Kind     string `json:"kind"`
 }
 
+type ApprovalStatus string
+
+const (
+	ApprovalPending          ApprovalStatus = "pending"
+	ApprovalDecisionRecorded ApprovalStatus = "decision_recorded"
+	ApprovalResponded        ApprovalStatus = "responded"
+	ApprovalCancelled        ApprovalStatus = "cancelled"
+	ApprovalExpired          ApprovalStatus = "expired"
+	ApprovalInterrupted      ApprovalStatus = "interrupted"
+)
+
+type ApprovalEnvelope struct {
+	ApprovalID       string         `json:"approval_id"`
+	RequestSHA256    string         `json:"request_sha256"`
+	ToolCallID       string         `json:"tool_call_id,omitempty"`
+	Title            string         `json:"title,omitempty"`
+	Kind             string         `json:"kind,omitempty"`
+	Status           ApprovalStatus `json:"status"`
+	SelectedOptionID string         `json:"selected_option_id,omitempty"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
+	ExpiresAt        time.Time      `json:"expires_at"`
+}
+
 type InteractionStatus string
 
 const (
@@ -396,15 +450,17 @@ const (
 )
 
 type Interaction struct {
-	ID        string             `json:"id"`
-	SessionID string             `json:"session_id"`
-	Kind      string             `json:"kind"`
-	Status    InteractionStatus  `json:"status"`
-	ToolCall  map[string]any     `json:"tool_call,omitempty"`
-	Options   []PermissionOption `json:"options,omitempty"`
-	CreatedAt time.Time          `json:"created_at"`
-	ExpiresAt time.Time          `json:"expires_at"`
-	respond   chan interactionResponse
+	ID            string             `json:"id"`
+	SessionID     string             `json:"session_id"`
+	Kind          string             `json:"kind"`
+	Status        InteractionStatus  `json:"status"`
+	ToolCall      map[string]any     `json:"tool_call,omitempty"`
+	Options       []PermissionOption `json:"options,omitempty"`
+	CreatedAt     time.Time          `json:"created_at"`
+	ExpiresAt     time.Time          `json:"expires_at"`
+	requestSHA256 string
+	preparing     bool
+	respond       chan interactionResponse
 }
 
 type interactionResponse struct {

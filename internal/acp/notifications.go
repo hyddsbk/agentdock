@@ -28,6 +28,8 @@ func (m *Manager) handleNotification(method string, params json.RawMessage) {
 	eventType := "session_update"
 	var updateType struct {
 		SessionUpdate string `json:"sessionUpdate"`
+		ToolCallID    string `json:"toolCallId,omitempty"`
+		MessageID     string `json:"messageId,omitempty"`
 	}
 	if json.Unmarshal(notification.Update, &updateType) == nil && updateType.SessionUpdate != "" {
 		eventType = updateType.SessionUpdate
@@ -37,5 +39,21 @@ func (m *Manager) handleNotification(method string, params json.RawMessage) {
 	if eventType == "agent_thought_chunk" {
 		return
 	}
-	run.appendSessionUpdate(Event{Type: eventType, Update: append(json.RawMessage(nil), notification.Update...)})
+	if err := run.appendSessionUpdate(Event{
+		Type:       eventType,
+		ToolCallID: boundedAuditIdentity(updateType.ToolCallID),
+		MessageID:  boundedAuditIdentity(updateType.MessageID),
+		Update:     append(json.RawMessage(nil), notification.Update...),
+	}); err != nil {
+		if run.cancel != nil {
+			run.cancel()
+		}
+		m.finishRun(run, RunFailed, "", newError(
+			"ACP_EVENT_JOURNAL_FAILED",
+			"persist ACP session update audit event",
+			true,
+			map[string]any{"session_id": run.SessionID, "run_id": run.ID},
+			err,
+		))
+	}
 }

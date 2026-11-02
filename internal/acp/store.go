@@ -2,6 +2,7 @@ package acp
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,7 +17,11 @@ import (
 	"github.com/uvwt/agentdock/internal/fs/securepath"
 )
 
-const sessionSchemaVersion = 1
+const (
+	sessionSchemaVersion            = 1
+	maxPersistedApprovalsPerSession = 32
+	maxApprovalMetadataBytes        = 512
+)
 
 type sessionStore struct {
 	root  string
@@ -111,12 +116,24 @@ func (s *sessionStore) markInterrupted() error {
 		if err != nil {
 			return fmt.Errorf("load ACP session %s during recovery: %w", id, err)
 		}
-		if record.Status != SessionRunning {
+		changed := false
+		if record.Status == SessionRunning {
+			record.Status = SessionInterrupted
+			record.LastStopReason = "agentdock_restart"
+			record.UpdatedAt = now
+			changed = true
+		}
+		for i := range record.Approvals {
+			if record.Approvals[i].Status != ApprovalPending && record.Approvals[i].Status != ApprovalDecisionRecorded {
+				continue
+			}
+			record.Approvals[i].Status = ApprovalInterrupted
+			record.Approvals[i].UpdatedAt = now
+			changed = true
+		}
+		if !changed {
 			continue
 		}
-		record.Status = SessionInterrupted
-		record.LastStopReason = "agentdock_restart"
-		record.UpdatedAt = now
 		if err := s.saveLocked(record); err != nil {
 			return err
 		}
@@ -219,6 +236,59 @@ func validateSessionRecord(expectedID string, record SessionRecord) error {
 	}
 	if record.CreatedAt.IsZero() || record.UpdatedAt.IsZero() {
 		return errors.New("ACP session timestamps are required")
+	}
+	if len(record.Approvals) > maxPersistedApprovalsPerSession {
+		return fmt.Errorf("ACP session approvals cannot exceed %d", maxPersistedApprovalsPerSession)
+	}
+	seenApprovals := make(map[string]struct{}, len(record.Approvals))
+	for index, approval := range record.Approvals {
+		if err := validateApprovalEnvelope(approval); err != nil {
+			return fmt.Errorf("invalid ACP approval %d: %w", index, err)
+		}
+		if _, exists := seenApprovals[approval.ApprovalID]; exists {
+			return fmt.Errorf("duplicate ACP approval id %q", approval.ApprovalID)
+		}
+		seenApprovals[approval.ApprovalID] = struct{}{}
+	}
+	return nil
+}
+
+func validateApprovalEnvelope(approval ApprovalEnvelope) error {
+	if strings.TrimSpace(approval.ApprovalID) == "" || strings.ContainsAny(approval.ApprovalID, "/\\\r\n") || len([]byte(approval.ApprovalID)) > maxApprovalMetadataBytes {
+		return errors.New("approval id is invalid")
+	}
+	if len(approval.RequestSHA256) != 64 {
+		return errors.New("approval request_sha256 must be 64 lowercase hex characters")
+	}
+	decoded, err := hex.DecodeString(approval.RequestSHA256)
+	if err != nil || len(decoded) != sha256.Size || approval.RequestSHA256 != strings.ToLower(approval.RequestSHA256) {
+		return errors.New("approval request_sha256 must be 64 lowercase hex characters")
+	}
+	for label, value := range map[string]string{
+		"tool_call_id": approval.ToolCallID,
+		"title":        approval.Title,
+		"kind":         approval.Kind,
+		"option_id":    approval.SelectedOptionID,
+	} {
+		if strings.ContainsAny(value, "\r\n") || len([]byte(value)) > maxApprovalMetadataBytes {
+			return fmt.Errorf("approval %s is invalid", label)
+		}
+	}
+	switch approval.Status {
+	case ApprovalPending, ApprovalDecisionRecorded, ApprovalResponded, ApprovalCancelled, ApprovalExpired, ApprovalInterrupted:
+	default:
+		return fmt.Errorf("invalid approval status %q", approval.Status)
+	}
+	if approval.CreatedAt.IsZero() || approval.UpdatedAt.IsZero() || approval.ExpiresAt.IsZero() {
+		return errors.New("approval timestamps are required")
+	}
+	if approval.ExpiresAt.Before(approval.CreatedAt) || approval.UpdatedAt.Before(approval.CreatedAt) {
+		return errors.New("approval timestamps are inconsistent")
+	}
+	if approval.Status == ApprovalDecisionRecorded || approval.Status == ApprovalResponded {
+		if strings.TrimSpace(approval.SelectedOptionID) == "" {
+			return errors.New("approval decision requires selected_option_id")
+		}
 	}
 	return nil
 }

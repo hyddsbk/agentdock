@@ -400,6 +400,11 @@ func (m *Manager) DeleteSession(ctx context.Context, id string) error {
 			}
 		}
 	}
+	if m.runJournal != nil {
+		if err := m.runJournal.DeleteSession(id); err != nil {
+			return err
+		}
+	}
 	if err := m.store.Delete(id); err != nil {
 		return err
 	}

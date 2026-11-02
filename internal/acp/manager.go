@@ -11,8 +11,9 @@ import (
 )
 
 type Manager struct {
-	opts  Options
-	store *sessionStore
+	opts       Options
+	store      *sessionStore
+	runJournal *runJournalStore
 
 	mu                 sync.RWMutex
 	process            *agentProcess
@@ -54,9 +55,14 @@ func NewManager(opts Options) (*Manager, error) {
 	if err != nil {
 		return nil, err
 	}
+	runJournal, err := newRunJournalStore(store.root)
+	if err != nil {
+		return nil, err
+	}
 	manager := &Manager{
 		opts:               opts,
 		store:              store,
+		runJournal:         runJournal,
 		sessions:           make(map[string]SessionRecord),
 		remoteToLocal:      make(map[string]string),
 		loaded:             make(map[string]sessionLifecycleResponse),
@@ -79,6 +85,20 @@ func NewManager(opts Options) (*Manager, error) {
 		}
 		manager.sessions[record.ID] = record
 		manager.remoteToLocal[record.RemoteSessionID] = record.ID
+	}
+	recoveredRuns, err := runJournal.LoadRecoveredRuns()
+	if err != nil {
+		return nil, err
+	}
+	for _, run := range recoveredRuns {
+		if _, ok := manager.sessions[run.SessionID]; !ok {
+			_ = runJournal.DeleteRun(run.ID)
+			continue
+		}
+		if _, exists := manager.runs[run.ID]; exists {
+			return nil, newError("ACP_RUN_STATE_INVALID", "duplicate recovered ACP run id", false, map[string]any{"run_id": run.ID}, nil)
+		}
+		manager.runs[run.ID] = run
 	}
 	return manager, nil
 }
@@ -108,6 +128,7 @@ func (m *Manager) Close() error {
 		}
 		for _, interaction := range m.interactions {
 			if interaction.Status == InteractionPending {
+				_ = m.persistApprovalStatusLocked(interaction, ApprovalInterrupted, "")
 				interaction.Status = InteractionExpired
 				select {
 				case interaction.respond <- interactionResponse{cancelled: true}:

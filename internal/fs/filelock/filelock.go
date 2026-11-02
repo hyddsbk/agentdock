@@ -183,6 +183,18 @@ func ownerPIDAlive(ownerPath string) bool {
 	if err != nil || len(data) > 64 {
 		return true
 	}
+	if len(data) > 0 {
+		allZero := true
+		for _, value := range data {
+			if value != 0 {
+				allZero = false
+				break
+			}
+		}
+		if allZero {
+			return false
+		}
+	}
 	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil || pid <= 0 {
 		return true

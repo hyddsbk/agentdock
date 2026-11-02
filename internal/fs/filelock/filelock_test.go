@@ -142,3 +142,23 @@ func TestAcquireDoesNotRemoveStaleLockWithInvalidOwnerPID(t *testing.T) {
 		t.Fatalf("invalid owner content = %q, err=%v", content, err)
 	}
 }
+
+func TestAcquireRecoversStaleLockWithNULOwnerPID(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.lock")
+	if err := os.Mkdir(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ownerPath := filepath.Join(path, ownerPrefix+strings.Repeat("c", 32))
+	if err := os.WriteFile(ownerPath, []byte{0, 0, 0, 0, 0, 0}, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stale := time.Now().Add(-staleAfter - time.Minute)
+	if err := os.Chtimes(ownerPath, stale, stale); err != nil {
+		t.Fatal(err)
+	}
+	release, err := Acquire(context.Background(), path)
+	if err != nil {
+		t.Fatalf("Acquire() stale NUL owner: %v", err)
+	}
+	release()
+}

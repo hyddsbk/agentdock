@@ -123,7 +123,13 @@ func (s *Store) CheckpointWithEvidenceTDDAndSemantics(
 				return err
 			}
 			normalizedExecutionEvidence = normalized
-			sameExecutionEvidence = reflect.DeepEqual(step.ExecutionEvidence, normalized)
+			if step.ExecutionEvidence != nil {
+				existingNormalized, err := normalizeExecutionEvidence(step.ID, step.ExecutionEvidence)
+				if err != nil {
+					return err
+				}
+				sameExecutionEvidence = reflect.DeepEqual(existingNormalized, normalized)
+			}
 		}
 		if step.Status == status && task.Summary == summary && diagnostic == nil && tddEvidence == nil && len(evidenceRecords) == 0 && len(unknownUpdates) == 0 && (executionEvidence == nil || sameExecutionEvidence) {
 			return errNoStateMutation

@@ -72,3 +72,65 @@ func TestExecutionReceiptCheckpointReplayIsStateIdempotent(t *testing.T) {
 		t.Fatalf("claim key = %q", claim.ClaimKey)
 	}
 }
+
+func TestExecutionEvidenceRefCheckpointReplayIsStateIdempotentAcrossPersistence(t *testing.T) {
+	service, _ := newTaskTestService(t)
+
+	created, err := service.manageTest(context.Background(), map[string]any{
+		"action": "create", "title": "Replay-safe evidence refs", "goal": "preserve semantic execution evidence across persistence",
+		"completion_conditions": []string{"verified once"},
+		"steps":                 []map[string]any{{"id": "verify", "title": "Verify"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskID := created["task_id"].(string)
+	req := map[string]any{
+		"action": "checkpoint", "task_id": taskID, "step_id": "verify", "status": "completed", "summary": "evidence recorded once",
+		"execution_evidence": map[string]any{"evidence_refs": []string{"test://execution-replay/evidence-ref-only"}},
+	}
+	if _, err := service.manageTest(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	first, err := service.manageTest(context.Background(), map[string]any{"action": "get", "task_id": taskID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := first["task"].(taskstate.Task)
+	beforeEvents := len(before.Events)
+	beforeUpdated := before.UpdatedAt
+
+	if _, err := service.manageTest(context.Background(), req); err != nil {
+		t.Fatalf("same evidence-ref checkpoint replay should be accepted idempotently: %v", err)
+	}
+	second, err := service.manageTest(context.Background(), map[string]any{"action": "get", "task_id": taskID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	after := second["task"].(taskstate.Task)
+	if len(after.Events) != beforeEvents {
+		t.Fatalf("evidence-ref checkpoint replay appended events: before=%d after=%d", beforeEvents, len(after.Events))
+	}
+	if !after.UpdatedAt.Equal(beforeUpdated) {
+		t.Fatalf("evidence-ref checkpoint replay rewrote task timestamp: before=%s after=%s", beforeUpdated, after.UpdatedAt)
+	}
+
+	changedReq := map[string]any{
+		"action": "checkpoint", "task_id": taskID, "step_id": "verify", "status": "completed", "summary": "evidence recorded once",
+		"execution_evidence": map[string]any{"evidence_refs": []string{"test://execution-replay/materially-different"}},
+	}
+	if _, err := service.manageTest(context.Background(), changedReq); err != nil {
+		t.Fatal(err)
+	}
+	third, err := service.manageTest(context.Background(), map[string]any{"action": "get", "task_id": taskID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := third["task"].(taskstate.Task)
+	if len(changed.Events) != beforeEvents+1 {
+		t.Fatalf("materially different execution evidence did not append exactly one event: before=%d after=%d", beforeEvents, len(changed.Events))
+	}
+	if !changed.UpdatedAt.After(beforeUpdated) {
+		t.Fatalf("materially different execution evidence did not advance task timestamp: before=%s after=%s", beforeUpdated, changed.UpdatedAt)
+	}
+}

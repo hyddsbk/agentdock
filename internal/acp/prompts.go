@@ -112,6 +112,36 @@ func (m *Manager) StartPrompt(ctx context.Context, sessionID, text string) (Prom
 		m.finishRun(run, RunFailed, "", err)
 		return PromptStartResult{}, err
 	}
+	if err := m.runJournal.Start(run); err != nil {
+		journalErr := newError(
+			"ACP_EVENT_JOURNAL_FAILED",
+			"initialize ACP audit journal",
+			true,
+			map[string]any{"session_id": sessionID, "run_id": run.ID},
+			err,
+		)
+		m.mu.Lock()
+		delete(m.activeRunBySession, sessionID)
+		delete(m.runs, run.ID)
+		if current, ok := m.sessions[sessionID]; ok {
+			current.Status = SessionReady
+			current.LastStopReason = ""
+			current.UpdatedAt = time.Now().UTC()
+			m.sessions[sessionID] = current
+			record = current
+		}
+		m.mu.Unlock()
+		_ = m.store.Save(record)
+		cancel()
+		select {
+		case <-m.runSlots:
+		default:
+		}
+		return PromptStartResult{}, journalErr
+	}
+	run.eventsMu.Lock()
+	run.persistEvent = m.runJournal.Append
+	run.eventsMu.Unlock()
 	go m.runPrompt(runCtx, run, record, text)
 	return PromptStartResult{RunID: run.ID, SessionID: sessionID, Status: RunRunning, StartedAt: run.StartedAt}, nil
 }
@@ -492,9 +522,27 @@ func (m *Manager) finishRun(run *Run, status RunStatus, stopReason string, err e
 		terminalEvent = Event{Type: "interrupted", StopReason: stopReason}
 	}
 	if terminalEvent.Type != "" {
-		run.appendEventLocked(terminalEvent)
+		if journalErr := run.appendEventLocked(terminalEvent); journalErr != nil {
+			status = RunFailed
+			stopReason = ""
+			err = newError(
+				"ACP_EVENT_JOURNAL_FAILED",
+				"persist ACP terminal audit event",
+				true,
+				map[string]any{"session_id": run.SessionID, "run_id": run.ID},
+				journalErr,
+			)
+			run.Status = status
+			run.StopReason = stopReason
+			run.Err = err
+		}
 	}
 	run.eventsMu.Unlock()
+	if m.runJournal != nil {
+		if journalErr := m.runJournal.Finish(run); journalErr != nil {
+			slog.Warn("finalize ACP audit journal metadata failed", "session_id", run.SessionID, "run_id", run.ID, "error", journalErr)
+		}
+	}
 
 	m.mu.Lock()
 	delete(m.activeRunBySession, run.SessionID)

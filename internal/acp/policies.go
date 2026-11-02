@@ -18,16 +18,22 @@ type ContextPolicy struct {
 }
 
 type EventPolicy struct {
-	Incremental       bool   `json:"incremental"`
-	Cursor            string `json:"cursor"`
-	MaxEventsPerPage  int    `json:"max_events_per_page"`
-	MaxRetainedEvents int    `json:"max_retained_events"`
-	MaxRetainedBytes  int    `json:"max_retained_bytes"`
-	MaxUpdateBytes    int    `json:"max_update_bytes"`
+	Incremental               bool   `json:"incremental"`
+	Cursor                    string `json:"cursor"`
+	MaxEventsPerPage          int    `json:"max_events_per_page"`
+	MaxRetainedEvents         int    `json:"max_retained_events"`
+	MaxRetainedBytes          int    `json:"max_retained_bytes"`
+	MaxUpdateBytes            int    `json:"max_update_bytes"`
+	AuditJournal              bool   `json:"audit_journal"`
+	PersistedPayloads         bool   `json:"persisted_payloads"`
+	PersistentMaxRuns         int    `json:"persistent_max_runs"`
+	PersistentMaxEventsPerRun int    `json:"persistent_max_events_per_run"`
+	PersistentMaxBytesPerRun  int    `json:"persistent_max_bytes_per_run"`
 }
 
 type InteractionPolicy struct {
 	MemoryOnly            bool `json:"memory_only"`
+	DurableApprovalState  bool `json:"durable_approval_state"`
 	MaxOptions            int  `json:"max_options"`
 	MaxToolCallBytes      int  `json:"max_tool_call_bytes"`
 	MaxPendingGlobal      int  `json:"max_pending_global"`
@@ -50,10 +56,15 @@ func CurrentPolicies() RuntimePolicies {
 		Events: EventPolicy{
 			Incremental: true, Cursor: "next_seq", MaxEventsPerPage: 200,
 			MaxRetainedEvents: maxEventCount, MaxRetainedBytes: maxEventBytes,
-			MaxUpdateBytes: maxEventUpdateBytes,
+			MaxUpdateBytes:            maxEventUpdateBytes,
+			AuditJournal:              true,
+			PersistedPayloads:         false,
+			PersistentMaxRuns:         maxPersistedAuditRuns,
+			PersistentMaxEventsPerRun: maxAuditEventsPerRun,
+			PersistentMaxBytesPerRun:  maxAuditBytesPerRun,
 		},
 		Interactions: InteractionPolicy{
-			MemoryOnly: true, MaxOptions: maxPermissionOptions,
+			MemoryOnly: true, DurableApprovalState: true, MaxOptions: maxPermissionOptions,
 			MaxToolCallBytes:      maxPermissionToolCallBytes,
 			MaxPendingGlobal:      maxPendingInteractions,
 			MaxPendingPerSession:  maxPendingInteractionsPerSession,

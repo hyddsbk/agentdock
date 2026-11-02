@@ -53,6 +53,9 @@ func Dispatch(ctx context.Context, runtime Runtime, request Request) (map[string
 	switch {
 	case path == "/internal/runtime/status":
 		return map[string]any(runtime.RuntimeStatus()), nil
+	case path == "/internal/runtime/overview":
+		result, err := runtime.RuntimeOverview()
+		return map[string]any(result), err
 	case path == "/internal/runtime/capabilities":
 		refresh := strings.EqualFold(request.queryValue("refresh"), "true") || method == http.MethodPost
 		result, err := runtime.RuntimeCapabilities(ctx, refresh)

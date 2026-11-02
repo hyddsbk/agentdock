@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/uvwt/agentdock/internal/buildinfo"
 	"github.com/uvwt/agentdock/internal/config"
@@ -35,6 +37,49 @@ func (r *Runtime) RuntimeStatus() Result {
 		"tool_count":            len(tools),
 		"tools":                 tools,
 	}
+}
+
+func (r *Runtime) RuntimeOverview() (Result, error) {
+	tasksResult, err := r.RuntimeTasks("", 200)
+	if err != nil {
+		return nil, err
+	}
+	tasks, _ := tasksResult["tasks"].([]map[string]any)
+	counts := map[string]int{
+		"active": 0, "completed": 0, "blocked": 0, "active_recent_24h": 0,
+	}
+	recentCutoff := time.Now().UTC().Add(-24 * time.Hour)
+	for _, task := range tasks {
+		status := strings.ToLower(strings.TrimSpace(fmt.Sprint(task["status"])))
+		switch status {
+		case "active":
+			counts["active"]++
+			updatedAt := strings.TrimSpace(fmt.Sprint(task["updated_at"]))
+			if parsed, parseErr := time.Parse(time.RFC3339Nano, updatedAt); parseErr == nil && !parsed.Before(recentCutoff) {
+				counts["active_recent_24h"]++
+			}
+		case "completed":
+			counts["completed"]++
+		case "blocked":
+			counts["blocked"]++
+		}
+	}
+
+	skills, err := r.skillCapabilityIndex()
+	if err != nil {
+		return nil, err
+	}
+	return Result{
+		"ok":     true,
+		"source": runtimeAPISource,
+		"tasks": Result{
+			"active": counts["active"], "completed": counts["completed"], "blocked": counts["blocked"],
+			"active_recent_24h": counts["active_recent_24h"],
+		},
+		"skills":  Result{"count": len(skills)},
+		"plugins": Result{"count": 0, "available": false},
+		"mcp":     Result{"count": len(r.dynamicMCP.CapabilityItems())},
+	}, nil
 }
 
 func (r *Runtime) RuntimeSkills() (Result, error) {

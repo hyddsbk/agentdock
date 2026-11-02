@@ -18,6 +18,7 @@ type runtimeStub struct {
 }
 
 func (r *runtimeStub) RuntimeStatus() app.Result                           { return app.Result{"status": "ok"} }
+func (r *runtimeStub) RuntimeOverview() (app.Result, error)                { return app.Result{"overview": true}, nil }
 func (r *runtimeStub) RuntimeSkills() (app.Result, error)                  { return app.Result{}, nil }
 func (r *runtimeStub) RuntimeSkill(string) (app.Result, error)             { return app.Result{}, nil }
 func (r *runtimeStub) RuntimeSkillFiles(string) (app.Result, error)        { return app.Result{}, nil }
@@ -85,6 +86,16 @@ func TestDispatchParsesTaskQuery(t *testing.T) {
 	}
 	if result["status"] != "active" || result["limit"] != 25 {
 		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestDispatchRuntimeOverview(t *testing.T) {
+	result, err := Dispatch(context.Background(), &runtimeStub{}, Request{Method: "GET", Path: "/internal/runtime/overview"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result["overview"] != true {
+		t.Fatalf("overview result = %#v", result)
 	}
 }
 
